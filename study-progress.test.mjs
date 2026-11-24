@@ -1,0 +1,15 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readSession,writeSession,examRecord,appendHistory,validHistory } from '../src/utils/studyProgress.js';
+import { serializeBackup,validateBackup } from '../src/utils/backup.js';
+const project={id:'p1',title:'Synthetic',config:{questionCount:2,passingScore:80,shuffle:true},questions:[{id:'a',question:'A?',options:['Yes','No'],answerIndex:0},{id:'b',question:'B?',options:['Yes','No'],answerIndex:1}],wrongQuestionIds:[],wrongCounts:{}};
+function memory(){const data=new Map();return {getItem:k=>data.get(k)??null,setItem:(k,v)=>data.set(k,v)};}
+const session={id:'s1',startedAt:1,mode:'mock',questionIds:['b','a'],currentIndex:1,answers:{b:1},starredIds:{b:true},isSubmitted:false,elapsedSeconds:25};
+test('resume preserves shuffled order, answers, location, stars and elapsed time',()=>{const s=memory();writeSession(project,session,s);const saved=readSession(project,s);assert.deepEqual(saved.questionIds,['b','a']);assert.deepEqual(saved.answers,{b:1});assert.equal(saved.currentIndex,1);assert.equal(saved.elapsedSeconds,25);assert.deepEqual(saved.starredIds,{b:true});});
+test('question corrections invalidate saved sessions',()=>{const s=memory();writeSession(project,session,s);assert.equal(readSession({...project,questions:project.questions.map(q=>({...q,answerIndex:0}))},s),null);});
+test('config changes invalidate old sessions',()=>{const s=memory();writeSession(project,session,s);assert.equal(readSession({...project,config:{...project.config,questionCount:1}},s),null);});
+test('different projects cannot resume each other',()=>{const s=memory();writeSession(project,session,s);assert.equal(readSession({...project,id:'p2'},s),null);});
+for(const patch of [{answers:{b:9}},{questionIds:['b','b']},{currentIndex:10},{elapsedSeconds:-1},{mode:'invalid'}])test(`reject corrupt session ${JSON.stringify(patch)}`,()=>{const s=memory();writeSession(project,{...session,...patch},s);assert.equal(readSession(project,s),null);});
+test('score rounding does not turn 79.6 percent into a pass at 80',()=>{const qs=Array.from({length:250},(_,i)=>({id:String(i),answerIndex:0}));const answers=Object.fromEntries(qs.slice(0,199).map(q=>[q.id,0]));const r=examRecord(project,qs,answers,session,10);assert.equal(r.score,80);assert.equal(r.passed,false);assert.ok(validHistory([r]));});
+test('history deduplicates session and retains latest 100',()=>{const record=examRecord(project,project.questions,{a:0,b:1},session,10);const many=Array.from({length:110},(_,i)=>({...record,id:String(i)}));assert.equal(appendHistory(many,record).length,100);assert.equal(appendHistory([record],record).length,1);});
+test('history survives backup roundtrip; corrupt scores rejected',()=>{const record=examRecord(project,project.questions,{a:0,b:1},session,10);const p={...project,examHistory:[record]};assert.deepEqual(validateBackup(serializeBackup([p]),2),[p]);assert.throws(()=>validateBackup(serializeBackup([{...p,examHistory:[{...record,score:3}]}]),2));});
