@@ -1,11 +1,14 @@
 /**
- * Kairos Digital Lab — 2D 空間座標表格 + 智慧題庫解析器 v1.6
- * 針對實測原檔《報到公安課題庫-抽20題考試(及格分100分)廠務端考試題庫.pdf》全面重構：
- * 1. 【2D 座標分欄引擎】直接利用 PDF 文字座標 (x, y) 自動偵測「題號欄 (id)」、「題目欄 (Question)」、「答案欄 (Answer)」，
- *    徹底解決原本把表格壓扁成純文字後，導致題幹數字干擾題號、或長選項緊貼答案數字（如「僅通知主管即可2」）的誤判。
- * 2. 【跨頁表格與溢位防呆】自動繼承第 1 頁欄位 X 座標至第 2~5 頁，並過濾跨頁拆字雜訊（如第 5 頁殘留的 'Answer' / 'r'）。
- * 3. 【全字元是非題與選擇題支援】同時支援 ASCII 'O'、希臘大寫 Omicron 'Ο' (U+039F)、'○'、'X'，以及無空白黏連的 (1)(2)(3)(4) / (A)(B)(C)(D)。
- * 4. 【雙引擎自動切換】若匯入的 PDF 為表格型題庫，直接走 2D 座標分欄精準還原 100 題；若為一般純文字段落考卷，自動切換至段落正則引擎。
+ * Kairos Digital Lab — 2D 座標錨點與多行儲存格還原解析器 v1.7
+ * 針對兩份實測原檔《100題廠務端考試題庫》與《255題報到公安課題庫》徹底重構：
+ * 1. 【左欄題號錨點法 (Anchor-Based Table Extraction)】
+ *    先在左側題號欄 (Item / id) 鎖定所有題號 Y 座標作為錨點，再將同一列上下浮動 ±28pt 內的題目文字、
+ *    多行換行文字、以及右側 Ans 欄答案全部歸位到該題號錨點，徹底解決 multi-line cell 錯位與漏題。
+ * 2. 【五欄表格修正欄支援 (Item | content | Ans | 題目修正 | 答案)】
+ *    若右側「題目修正」與「答案」欄有更新版題目（如第 57、68、83、125、192、207、228、229 題），
+ *    自動將修訂版題目與答案納入解析對照，並避免右欄內容污染主選項。
+ * 3. 【跨欄合併與小寫 o/x、數字 0 誤植校正】
+ *    處理 PDF 引擎將「第 55 題題幹 + 3」或「141 + 0」合併成同一文字片段的情況，並支援小寫 o/x 及全形字元。
  */
 import * as pdfjsLib from 'pdfjs-dist';
 
@@ -17,12 +20,12 @@ const LETTER_TO_INDEX = {
   '①': 0, '②': 1, '③': 2, '④': 3, '⑤': 4,
 };
 
-// 包含 ASCII O (U+004F)、希臘大寫 Omicron Ο (U+039F)、全形 Ｏ (U+FF2F)、圓圈 ○ (U+25CB)
 const TF_TRUE_SET = new Set(['O', 'Ο', 'Ｏ', '○', '〇', '對', '是', 'TRUE', 'T', '✓', '✔']);
 const TF_FALSE_SET = new Set(['X', 'Χ', 'Ｘ', '✕', '✖', '×', '錯', '否', 'FALSE', 'F']);
 
 function normalizeChars(str) {
   return str
+    .replace(/\(cid:\d+\)/g, ' ')
     .replace(/[Ａ-Ｚ]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xfee0))
     .replace(/[０-９]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xfee0))
     .replace(/Ο/g, 'O')
@@ -34,7 +37,7 @@ function normalizeChars(str) {
 
 function cleanPdfNoise(text) {
   return text
-    .replace(/#?\s*Micron\s+Confidential/gi, ' ')
+    .replace(/#?\s*Micron\s+Confidential\s*#?/gi, ' ')
     .replace(/#?\s*Item\s+content\s+Ans(?:wer)?(?:\s+題目修正\s+答案)?/gi, ' ')
     .replace(/(?:題號|題目內容|題幹|標準答案|參考答案)\s+(?:選項|答案|解析)/g, ' ')
     .replace(/Page\s+\d+\s+(?:of|\/)\s+\d+/gi, ' ')
@@ -42,7 +45,7 @@ function cleanPdfNoise(text) {
 }
 
 function extractChoiceOptions(text) {
-  const parenNumMatches = [...text.matchAll(/\(\s*([1-5])\s*\)\s*/g)];
+  const parenNumMatches = [...text.matchAll(/\(\s*([1-5]?)\s*\)\s*/g)];
   if (parenNumMatches.length >= 2) {
     const firstOneIdx = parenNumMatches.findIndex((m) => m[1] === '1');
     const validMatches = firstOneIdx >= 0 ? parenNumMatches.slice(firstOneIdx) : parenNumMatches;
@@ -65,14 +68,17 @@ function extractChoiceOptions(text) {
   return [];
 }
 
-function buildQuestionObject(qNum, rawQuestionText, rawAnswerToken, explanationText, idx) {
+function buildQuestionObject(qNum, rawQuestionText, rawAnswerToken, revisionText, revisionAns, idx) {
   let body = normalizeChars(rawQuestionText).replace(/\s+/g, ' ').trim();
   let ansToken = rawAnswerToken ? normalizeChars(rawAnswerToken).trim().toUpperCase() : '';
-  let explanation = explanationText ? explanationText.trim() : '';
+  const revClean = revisionText ? normalizeChars(revisionText).replace(/\s+/g, ' ').trim() : '';
+  const revAnsClean = revisionAns ? normalizeChars(revisionAns).trim().toUpperCase() : '';
+
+  let explanation = '';
 
   const expMatch = body.match(/(?:解析|詳解|說明|備註)\s*:\s*(.+)$/i);
   if (expMatch) {
-    if (!explanation) explanation = expMatch[1].trim();
+    explanation = expMatch[1].trim();
     body = body.slice(0, expMatch.index).trim();
   }
 
@@ -102,10 +108,16 @@ function buildQuestionObject(qNum, rawQuestionText, rawAnswerToken, explanationT
       if (optText) options.push(optText);
     }
 
+    const effectiveAns = ansToken || revAnsClean;
     const answerIndex =
-      ansToken && ansToken in LETTER_TO_INDEX
-        ? Math.min(LETTER_TO_INDEX[ansToken], options.length - 1)
+      effectiveAns && effectiveAns in LETTER_TO_INDEX
+        ? Math.min(LETTER_TO_INDEX[effectiveAns], options.length - 1)
         : 0;
+
+    const notes = [
+      explanation,
+      revClean ? `題目修正／補充對照：${revClean}${revAnsClean ? `（修正答案：${revAnsClean}）` : ''}` : '',
+    ].filter(Boolean);
 
     if (questionStem && options.length >= 2) {
       return {
@@ -115,7 +127,7 @@ function buildQuestionObject(qNum, rawQuestionText, rawAnswerToken, explanationT
         question: questionStem,
         options: options.slice(0, 5),
         answerIndex,
-        explanation: explanation || '未提供詳細解析，建議對照原始講義或法規條文複習。',
+        explanation: notes.join(' ｜ ') || '未提供詳細解析，建議對照原始講義或法規條文複習。',
       };
     }
   } else {
@@ -128,8 +140,17 @@ function buildQuestionObject(qNum, rawQuestionText, rawAnswerToken, explanationT
       }
     }
 
-    if (stemText.length >= 3 && (TF_TRUE_SET.has(ansToken) || TF_FALSE_SET.has(ansToken))) {
-      const isTrue = TF_TRUE_SET.has(ansToken);
+    const effectiveTf = ansToken || revAnsClean;
+    const isTrue = TF_TRUE_SET.has(effectiveTf) || effectiveTf === '0';
+    const isFalse = TF_FALSE_SET.has(effectiveTf);
+
+    if (stemText.length >= 3 && (isTrue || isFalse)) {
+      const notes = [
+        explanation,
+        revClean ? `題目修正／補充對照：${revClean}` : '',
+        !explanation && !revClean ? `是非題標準答案：${isTrue ? 'O（正確）' : 'X（錯誤）'}` : '',
+      ].filter(Boolean);
+
       return {
         id: `q-${Date.now()}-${idx}`,
         sourceNumber: qNum || idx + 1,
@@ -137,7 +158,7 @@ function buildQuestionObject(qNum, rawQuestionText, rawAnswerToken, explanationT
         question: stemText,
         options: ['O（正確）', 'X（錯誤）'],
         answerIndex: isTrue ? 0 : 1,
-        explanation: explanation || `是非題標準答案：${isTrue ? 'O（正確）' : 'X（錯誤）'}`,
+        explanation: notes.join(' ｜ '),
       };
     }
   }
@@ -148,16 +169,20 @@ function buildQuestionObject(qNum, rawQuestionText, rawAnswerToken, explanationT
 function parseSpatialTablePages(pagesItems) {
   let idColMaxX = null;
   let ansColMinX = null;
+  let ansColMaxX = null;
 
   for (const p of pagesItems) {
     const pageW = p.width || 842;
     for (const it of p.items) {
       const norm = normalizeChars(it.str).trim().toLowerCase();
-      if (/^(?:id|no\.?|#|題號|項次|編號)$/.test(norm) && it.x < pageW * 0.2) {
-        idColMaxX = Math.max(idColMaxX || 0, it.x + Math.max(it.width, 18) + 12);
+      if (/^(?:id|no\.?|#|題號|項次|編號|item\b)/.test(norm) && it.x < pageW * 0.22) {
+        idColMaxX = Math.max(idColMaxX || 0, it.x + 24);
       }
-      if (/^(?:ans|answer|answ|答案|正解|解答)$/.test(norm) && it.x > pageW * 0.55) {
-        ansColMinX = ansColMinX === null ? it.x - 10 : Math.min(ansColMinX, it.x - 10);
+      if (/^(?:ans|answer|answ|答案|正解|解答)\b/.test(norm) && it.x > pageW * 0.4) {
+        if (ansColMinX === null || it.x - 10 < ansColMinX) {
+          ansColMinX = it.x - 10;
+          ansColMaxX = it.x + 38;
+        }
       }
     }
   }
@@ -167,13 +192,13 @@ function parseSpatialTablePages(pagesItems) {
     for (const p of pagesItems) {
       const pageW = p.width || 842;
       for (const it of p.items) {
-        if (it.x < pageW * 0.14 && /^\d{1,4}$/.test(it.str.trim())) {
-          leftNums.push(it.x + (it.width || 12));
+        if (it.x < pageW * 0.16 && /^\d{1,4}\b/.test(it.str.trim())) {
+          leftNums.push(it.x + 20);
         }
       }
     }
     if (leftNums.length >= 3) {
-      idColMaxX = Math.max(...leftNums) + 10;
+      idColMaxX = Math.max(...leftNums);
     }
   }
 
@@ -183,13 +208,14 @@ function parseSpatialTablePages(pagesItems) {
       const pageW = p.width || 842;
       for (const it of p.items) {
         const tok = normalizeChars(it.str).trim().toUpperCase();
-        if (it.x > pageW * 0.72 && /^(?:[A-E1-5OX○✕])$/.test(tok)) {
+        if (it.x > pageW * 0.45 && /^(?:[A-E1-5OX○✕])$/.test(tok)) {
           rightAnswers.push(it.x);
         }
       }
     }
     if (rightAnswers.length >= 3) {
       ansColMinX = Math.min(...rightAnswers) - 10;
+      ansColMaxX = Math.min(...rightAnswers) + 38;
     }
   }
 
@@ -200,83 +226,123 @@ function parseSpatialTablePages(pagesItems) {
   const tableRows = [];
 
   for (const p of pagesItems) {
-    const sorted = [...p.items].sort((a, b) => {
-      if (Math.abs(a.y - b.y) > 5) return b.y - a.y;
-      return a.x - b.x;
+    const pageW = p.width || 842;
+    const pageH = p.height || 595;
+
+    const validItems = p.items.filter((it) => {
+      const s = normalizeChars(it.str).trim();
+      if (!s) return false;
+      if (/Micron\s+Confidential/i.test(s)) return false;
+      if (
+        it.y > pageH - 85 &&
+        /^(?:id|question|answer|answ|item|content|ans|題目修正|答案)\b/i.test(s)
+      ) {
+        return false;
+      }
+      return true;
     });
 
-    const yGroups = [];
-    for (const it of sorted) {
-      let targetGroup = null;
-      for (const g of yGroups) {
-        if (Math.abs(g.y - it.y) <= 5) {
-          targetGroup = g;
-          break;
+    const anchors = [];
+    const bodyItems = [];
+
+    for (const it of validItems) {
+      const s = normalizeChars(it.str).trim();
+      if (it.x < idColMaxX) {
+        const mPureNum = s.match(/^(\d{1,4})$/);
+        const mMergedLead = s.match(/^(\d{1,4})\s+(.+)$/);
+        if (mPureNum) {
+          anchors.push({
+            qNum: parseInt(mPureNum[1], 10),
+            y: it.y,
+            qParts: [],
+            ansParts: [],
+            revParts: [],
+            revAnsParts: [],
+          });
+        } else if (mMergedLead) {
+          anchors.push({
+            qNum: parseInt(mMergedLead[1], 10),
+            y: it.y,
+            qParts: [{ y: it.y, x: it.x, width: it.width, str: mMergedLead[2] }],
+            ansParts: [],
+            revParts: [],
+            revAnsParts: [],
+          });
+        } else {
+          bodyItems.push(it);
         }
-      }
-      if (targetGroup) {
-        targetGroup.items.push(it);
       } else {
-        yGroups.push({ y: it.y, items: [it] });
+        bodyItems.push(it);
       }
     }
 
-    for (const g of yGroups) {
-      g.items.sort((a, b) => a.x - b.x);
-      const idParts = [];
-      const qParts = [];
-      const ansParts = [];
+    anchors.sort((a, b) => b.y - a.y);
 
-      for (const it of g.items) {
-        const s = it.str.trim();
-        if (!s) continue;
-
-        if (it.x < idColMaxX) {
-          const mergedLead = s.match(/^(\d{1,4})\s+(.+)$/);
-          if (mergedLead) {
-            idParts.push(mergedLead[1]);
-            qParts.push(mergedLead[2]);
-          } else {
-            idParts.push(s);
-          }
-        } else if (it.x >= ansColMinX) {
-          ansParts.push(s);
-        } else {
-          qParts.push(s);
+    for (const it of bodyItems) {
+      if (anchors.length === 0) continue;
+      let bestAnchor = null;
+      let bestDist = Infinity;
+      for (const a of anchors) {
+        const dist = Math.abs(a.y - it.y);
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestAnchor = a;
         }
       }
+      if (!bestAnchor || bestDist > 28) continue;
 
-      const idStr = normalizeChars(idParts.join(' ')).trim();
-      let qStr = qParts.join(' ').trim();
-      let ansStr = normalizeChars(ansParts.join(' ')).trim();
+      const s = it.str.trim();
+      if (it.x < ansColMinX) {
+        bestAnchor.qParts.push({ y: it.y, x: it.x, width: it.width, str: s });
+      } else if (it.x <= ansColMaxX) {
+        const mMergedAns = normalizeChars(s).match(/^([A-E1-5OX○✕0])\s+(.+)$/i);
+        if (mMergedAns) {
+          bestAnchor.ansParts.push(mMergedAns[1]);
+          bestAnchor.revParts.push({ y: it.y, x: it.x, width: it.width, str: mMergedAns[2] });
+        } else {
+          bestAnchor.ansParts.push(s);
+        }
+      } else if (it.x > pageW * 0.82) {
+        bestAnchor.revAnsParts.push(s);
+      } else {
+        bestAnchor.revParts.push({ y: it.y, x: it.x, width: it.width, str: s });
+      }
+    }
 
-      if (/^(?:id|no\.?|#|題號|項次|編號)$/i.test(idStr)) continue;
-      if (/^(?:question|題目|題幹|問題)$/i.test(qStr)) continue;
-      if (!idStr && !ansStr && /^(?:ans|answer|answ|r|答案|正解)$/i.test(qStr)) continue;
+    for (const a of anchors) {
+      a.qParts.sort((u, v) => {
+        if (Math.abs(u.y - v.y) > 4) return v.y - u.y;
+        return u.x - v.x;
+      });
+      a.revParts.sort((u, v) => {
+        if (Math.abs(u.y - v.y) > 4) return v.y - u.y;
+        return u.x - v.x;
+      });
+
+      let qStr = a.qParts.map((p) => p.str).join(' ').trim();
+      let ansStr = normalizeChars(a.ansParts.join(' ')).trim();
+      const revStr = a.revParts.map((p) => p.str).join(' ').trim();
+      const revAnsStr = normalizeChars(a.revAnsParts.join(' ')).trim();
 
       if (!ansStr && qStr) {
-        const maxRightX = Math.max(...g.items.map((it) => it.x + (it.width || 0)));
-        if (maxRightX >= ansColMinX - 3) {
-          const tailAnsMatch = normalizeChars(qStr).match(/([A-E1-5OX○✕])\s*$/i);
-          if (tailAnsMatch) {
-            ansStr = tailAnsMatch[1].toUpperCase();
-            qStr = qStr.slice(0, qStr.length - tailAnsMatch[0].length).trim();
+        const maxRight = Math.max(...a.qParts.map((p) => p.x + (p.width || 0)), 0);
+        if (maxRight >= ansColMinX - 4) {
+          const tailAns = normalizeChars(qStr).match(/(?:\s+|(?<=[\u4e00-\u9fa5。．.?!？\)\]」』）]))([A-E1-5OX○✕0])\s*$/i);
+          if (tailAns) {
+            ansStr = tailAns[1].toUpperCase();
+            qStr = qStr.slice(0, qStr.length - tailAns[0].length).trim();
           }
         }
       }
 
-      if (/^\d{1,4}$/.test(idStr) && qStr) {
+      if (qStr) {
         tableRows.push({
-          qNum: parseInt(idStr, 10),
+          qNum: a.qNum,
           questionText: qStr,
           answerText: ansStr,
+          revisionText: revStr,
+          revisionAns: revAnsStr,
         });
-      } else if (tableRows.length > 0 && qStr && !idStr) {
-        const prev = tableRows[tableRows.length - 1];
-        prev.questionText = `${prev.questionText} ${qStr}`.trim();
-        if (!prev.answerText && ansStr) {
-          prev.answerText = ansStr;
-        }
       }
     }
   }
@@ -288,7 +354,14 @@ function parseSpatialTablePages(pagesItems) {
 
   for (let i = 0; i < tableRows.length; i++) {
     const row = tableRows[i];
-    const qObj = buildQuestionObject(row.qNum, row.questionText, row.answerText, '', i);
+    const qObj = buildQuestionObject(
+      row.qNum,
+      row.questionText,
+      row.answerText,
+      row.revisionText,
+      row.revisionAns,
+      i
+    );
     if (qObj) {
       seenNumbers.add(row.qNum);
       questions.push(qObj);
@@ -452,7 +525,7 @@ export function parseQuestionsWithDiagnostics(rawText) {
     const fullText = block.rawLines.join(' ').replace(/\s+/g, ' ').trim();
     const fallbackAns =
       block.inlineAnswer || (block.qNum && block.qNum in answerKeyMap ? answerKeyMap[block.qNum] : '');
-    const qObj = buildQuestionObject(block.qNum, fullText, fallbackAns, '', idx);
+    const qObj = buildQuestionObject(block.qNum, fullText, fallbackAns, '', '', idx);
     if (qObj) {
       if (block.qNum) seenNumbers.add(block.qNum);
       parsedQuestions.push(qObj);

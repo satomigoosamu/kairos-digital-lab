@@ -240,10 +240,10 @@ export default function ImportDrawer({ isOpen, onClose, onCreateProject }) {
                 <Upload className="h-5 w-5" />
               </div>
               <p className="text-sm font-medium text-charcoal dark:text-zinc-100">
-                {isParsing ? '正在透過 2D 座標引擎解析 PDF 表格與選項...' : '拖曳 PDF / JSON / TXT 題庫至此，或點擊選擇本機檔案'}
+                {isParsing ? '正在透過 2D 座標錨點引擎解析多行表格...' : '拖曳 PDF / JSON / TXT 題庫至此，或點擊選擇本機檔案'}
               </p>
               <p className="mt-1 text-xs text-slateink dark:text-zinc-400">
-                支援 2D 座標表格題庫、(1)(2)(3)(4) 選擇題、(A)(B)(C)(D) 選擇題及是非題（O / X）
+                支援多行儲存格表格、五欄修訂題庫、(1)(2)(3)(4) 選擇題及是非題（O / X）
               </p>
             </div>
           )}
@@ -302,19 +302,19 @@ export default function ImportDrawer({ isOpen, onClose, onCreateProject }) {
                     成功切分 <span className="font-mono text-sm">{parsedQuestions.length}</span> 道獨立題目
                   </span>
                 </div>
-                <span className="font-mono text-[11px] text-slateink dark:text-zinc-400">2D TABLE ENGINE</span>
+                <span className="font-mono text-[11px] text-slateink dark:text-zinc-400">2D ANCHOR ENGINE</span>
               </div>
 
               {missingNumbers.length > 0 && missingNumbers.length <= 15 && (
                 <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-300">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
                   <div>
-                    <span className="font-semibold">題號連續性提示：</span>
-                    原文件題號序列中缺少{' '}
+                    <span className="font-semibold">原檔缺號提示：</span>
+                    原文件編號序列中未出現{' '}
                     <span className="font-mono font-bold">
-                      {missingNumbers.map((n) => `第 ${n} 題`).join('、')}
+                      {missingNumbers.map((n) => `第 ${n} 號`).join('、')}
                     </span>
-                    。
+                    （原檔本身跳號，其餘題目皆已完整收錄）。
                   </div>
                 </div>
               )}

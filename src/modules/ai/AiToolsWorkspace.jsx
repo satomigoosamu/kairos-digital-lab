@@ -38,7 +38,7 @@ export default function AiToolsWorkspace() {
         <div>
           <span className="font-mono text-xs uppercase tracking-wider text-gold">AI WORKFLOW HELPER</span>
           <h2 className="text-lg font-bold tracking-tight text-charcoal dark:text-zinc-100">
-            講義轉 JSON 題庫指令產生器
+            講義轉 JSON 題庫指令產生器（0 Token 消耗）
           </h2>
         </div>
         <span className="rounded-md border border-zinc-200 bg-white px-2.5 py-1 font-mono text-xs text-slateink dark:border-zinc-800 dark:bg-obsidian-surface dark:text-zinc-400">
@@ -50,7 +50,7 @@ export default function AiToolsWorkspace() {
         <div className="mb-4 flex items-center gap-2">
           <FileJson className="h-4 w-4 text-gold" />
           <h3 className="text-sm font-semibold text-charcoal dark:text-zinc-100">
-            遇到掃描版 PDF 或純講義筆記？一鍵複製結構化出題指令
+            完全不呼叫付費 API、不扣任何 Token — 複製指令貼給你的免費版 ChatGPT / Gemini 即可批次轉檔
           </h3>
         </div>
 
