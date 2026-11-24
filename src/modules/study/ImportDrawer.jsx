@@ -21,7 +21,7 @@ import {
   SAMPLE_JSON_TEMPLATE,
 } from '../../utils/pdfParser';
 
-const OPTION_LABELS = ['A', 'B', 'C', 'D', 'E'];
+const OPTION_LABELS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
 
 export default function ImportDrawer({ isOpen, onClose, onCreateProject }) {
   const [sourceTab, setSourceTab] = useState('pdf');
@@ -66,7 +66,7 @@ export default function ImportDrawer({ isOpen, onClose, onCreateProject }) {
       setMissingNumbers([]);
       return;
     }
-    setErrorMsg('');
+    setErrorMsg(Array.isArray(resultObj) ? '' : (resultObj.warnings || []).join(' '));
     setParsedQuestions(questions);
     setMissingNumbers(missing);
     setQuestionCount(questions.length);
@@ -314,7 +314,7 @@ export default function ImportDrawer({ isOpen, onClose, onCreateProject }) {
                     <span className="font-mono font-bold">
                       {missingNumbers.map((n) => `第 ${n} 號`).join('、')}
                     </span>
-                    （原檔本身跳號，其餘題目皆已完整收錄）。
+                    （未自動補題；刪除及異常題另見匯入提示）。
                   </div>
                 </div>
               )}

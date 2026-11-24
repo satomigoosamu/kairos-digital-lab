@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import ExamConfigPopover from './ExamConfigPopover';
 
-const OPTION_LABELS = ['A', 'B', 'C', 'D', 'E'];
+const OPTION_LABELS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
 const NAV_PAGE_SIZE = 20;
 
 function buildSessionQuestions(project) {
