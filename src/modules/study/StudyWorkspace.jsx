@@ -50,7 +50,6 @@ export default function StudyWorkspace({ project, onSaveProject }) {
   const [onlyWrongFilter, setOnlyWrongFilter] = useState(true);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
-  // 題號預覽卡分頁（每 20 題 1 頁）與題號搜尋
   const [navPage, setNavPage] = useState(0);
   const [searchNumInput, setSearchNumInput] = useState('');
 
@@ -81,7 +80,6 @@ export default function StudyWorkspace({ project, onSaveProject }) {
     }
   }, [project?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 切換題目時，題號預覽卡自動翻到該題所在的分頁（每 20 題 1 頁）
   useEffect(() => {
     setNavPage(Math.floor(currentIndex / NAV_PAGE_SIZE));
   }, [currentIndex]);
@@ -230,7 +228,6 @@ export default function StudyWorkspace({ project, onSaveProject }) {
   const answeredCount = sessionQuestions.filter((q) => answers[q.id] !== undefined).length;
   const progressPct = sessionQuestions.length > 0 ? Math.round((answeredCount / sessionQuestions.length) * 100) : 0;
 
-  // 題號預覽卡分頁計算（每 20 題 1 頁）
   const totalNavPages = Math.max(1, Math.ceil(sessionQuestions.length / NAV_PAGE_SIZE));
   const safeNavPage = Math.min(navPage, totalNavPages - 1);
   const pageStartIdx = safeNavPage * NAV_PAGE_SIZE;
@@ -497,7 +494,6 @@ export default function StudyWorkspace({ project, onSaveProject }) {
                 <h2 className="text-base font-semibold leading-relaxed text-charcoal dark:text-zinc-100 sm:text-lg">
                   {currentQuestion.question}
                 </h2>
-                {/* 星號標記按鈕 */}
                 <button
                   type="button"
                   onClick={() =>
@@ -628,7 +624,6 @@ export default function StudyWorkspace({ project, onSaveProject }) {
             </div>
           </div>
 
-          {/* 右側題號預覽卡（每 20 題 1 頁 + 題號搜尋跳轉） */}
           <div className="lg:col-span-4">
             <div className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-obsidian-surface">
               <div className="mb-3 flex items-center justify-between">
@@ -638,7 +633,6 @@ export default function StudyWorkspace({ project, onSaveProject }) {
                 </span>
               </div>
 
-              {/* 搜尋題號快速跳轉 */}
               <form onSubmit={handleJumpToQuestion} className="mb-3 flex items-center gap-1.5">
                 <div className="relative flex-1">
                   <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
@@ -660,7 +654,6 @@ export default function StudyWorkspace({ project, onSaveProject }) {
                 </button>
               </form>
 
-              {/* 圖例 */}
               <div className="mb-3 flex flex-wrap items-center gap-3 text-[11px] text-slateink dark:text-zinc-400">
                 <span className="flex items-center gap-1">
                   <span className="h-2.5 w-2.5 rounded-sm bg-charcoal dark:bg-zinc-200" />
@@ -676,7 +669,6 @@ export default function StudyWorkspace({ project, onSaveProject }) {
                 </span>
               </div>
 
-              {/* 每頁 20 題矩陣 */}
               <div className="grid grid-cols-5 gap-1.5">
                 {pageQuestions.map((q, localIdx) => {
                   const globalIdx = pageStartIdx + localIdx;
@@ -713,7 +705,6 @@ export default function StudyWorkspace({ project, onSaveProject }) {
                 })}
               </div>
 
-              {/* 每 20 題分頁切換列 */}
               {totalNavPages > 1 && (
                 <div className="mt-3 flex items-center justify-between border-t border-zinc-100 pt-2.5 font-mono text-[11px] text-slateink dark:border-zinc-800 dark:text-zinc-400">
                   <button

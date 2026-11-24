@@ -15,7 +15,7 @@ import {
   Eye,
 } from 'lucide-react';
 import {
-  extractTextFromPdf,
+  parsePdfFileWithDiagnostics,
   parseQuestionsWithDiagnostics,
   parseQuestionsFromJson,
   SAMPLE_JSON_TEMPLATE,
@@ -82,8 +82,7 @@ export default function ImportDrawer({ isOpen, onClose, onCreateProject }) {
     try {
       const ext = file.name.split('.').pop().toLowerCase();
       if (ext === 'pdf') {
-        const text = await extractTextFromPdf(file);
-        const result = parseQuestionsWithDiagnostics(text);
+        const result = await parsePdfFileWithDiagnostics(file);
         applyParsedResult(result, file.name);
       } else if (ext === 'json') {
         const text = await file.text();
@@ -241,10 +240,10 @@ export default function ImportDrawer({ isOpen, onClose, onCreateProject }) {
                 <Upload className="h-5 w-5" />
               </div>
               <p className="text-sm font-medium text-charcoal dark:text-zinc-100">
-                {isParsing ? '正在本機解析 PDF 題幹與選項...' : '拖曳 PDF / JSON / TXT 題庫至此，或點擊選擇本機檔案'}
+                {isParsing ? '正在透過 2D 座標引擎解析 PDF 表格與選項...' : '拖曳 PDF / JSON / TXT 題庫至此，或點擊選擇本機檔案'}
               </p>
               <p className="mt-1 text-xs text-slateink dark:text-zinc-400">
-                支援表格型題庫、(1)(2)(3)(4) 選擇題、(A)(B)(C)(D) 選擇題及是非題（O / X）
+                支援 2D 座標表格題庫、(1)(2)(3)(4) 選擇題、(A)(B)(C)(D) 選擇題及是非題（O / X）
               </p>
             </div>
           )}
@@ -273,7 +272,7 @@ export default function ImportDrawer({ isOpen, onClose, onCreateProject }) {
                 placeholder={
                   sourceTab === 'json'
                     ? SAMPLE_JSON_TEMPLATE
-                    : '35 選擇風險控制措施時應優先選擇下列何者？(1) 個人防護具 (2) 工程控制 (3) 管理控制 (4) 消除 4'
+                    : '85 選擇風險控制措施時應優先選擇下列何者?(1)個人防護具(2)工程控制(3)管理控制(4)消除 4'
                 }
                 className="w-full rounded-lg border border-zinc-300 bg-white p-3 font-mono text-xs text-charcoal focus:border-gold focus:outline-none dark:border-zinc-700 dark:bg-obsidian-surface dark:text-zinc-100"
               />
@@ -303,10 +302,9 @@ export default function ImportDrawer({ isOpen, onClose, onCreateProject }) {
                     成功切分 <span className="font-mono text-sm">{parsedQuestions.length}</span> 道獨立題目
                   </span>
                 </div>
-                <span className="font-mono text-[11px] text-slateink dark:text-zinc-400">LOCAL INDEXEDDB</span>
+                <span className="font-mono text-[11px] text-slateink dark:text-zinc-400">2D TABLE ENGINE</span>
               </div>
 
-              {/* 若原始題號有跳號，主動提示缺少哪幾題 */}
               {missingNumbers.length > 0 && missingNumbers.length <= 15 && (
                 <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-300">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
@@ -316,12 +314,11 @@ export default function ImportDrawer({ isOpen, onClose, onCreateProject }) {
                     <span className="font-mono font-bold">
                       {missingNumbers.map((n) => `第 ${n} 題`).join('、')}
                     </span>
-                    （可能為跨頁格式異常或非題目列）。
+                    。
                   </div>
                 </div>
               )}
 
-              {/* 題目與選項切分預覽區 */}
               <div>
                 <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-charcoal dark:text-zinc-200">
                   <Eye className="h-3.5 w-3.5 text-gold" />
