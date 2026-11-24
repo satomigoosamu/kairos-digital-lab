@@ -1,15 +1,9 @@
-/**
- * Kairos Digital Lab — 外部服務與贊助連結集中設定檔
- * 已填入歐付寶 O'Pay 實際贊助收款連結（NT$ 50 / NT$ 100 / NT$ 200）
- */
 export const KAIROS_CONFIG = {
   brandName: 'Kairos Digital Lab',
   productName: '題庫練習室',
   version: 'v1.3 Modular Workspace',
   contactEmail: 'contact@kairos-lab.tw',
-  // Google Forms 匿名回饋表單連結（建立後替換此處網址）
-  feedbackFormUrl: 'https://forms.gle/your-google-form-id',
-  // 歐付寶 O'Pay 贊助收款連結
+  feedbackFormUrl: 'https://forms.gle/5MBmjGSrtCzFdZCs6',
   tipLinks: [
     {
       id: 'coffee-50',
