@@ -138,7 +138,7 @@ export default function StudyWorkspace({ project, onSaveProject }) {
       if (!currentQuestion) return;
 
       const key = e.key.toUpperCase();
-      const keyMap = { '1': 0, A: 0, '2': 1, B: 1, '3': 2, C: 2, '4': 3, D: 3 };
+      const keyMap = { '1': 0, A: 0, O: 0, '2': 1, B: 1, X: 1, '3': 2, C: 2, '4': 3, D: 3 };
       if (key in keyMap && keyMap[key] < currentQuestion.options.length) {
         e.preventDefault();
         handleSelectOption(keyMap[key]);
@@ -563,7 +563,7 @@ export default function StudyWorkspace({ project, onSaveProject }) {
                 </button>
 
                 <span className="hidden font-mono text-[11px] text-zinc-400 sm:inline">
-                  快捷鍵：A-D 作答 · ← → 換題
+                  快捷鍵：A-D / O-X 作答 · ← → 換題
                 </span>
 
                 {currentIndex < sessionQuestions.length - 1 ? (

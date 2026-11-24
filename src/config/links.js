@@ -1,7 +1,10 @@
+/**
+ * Kairos Digital Lab — 外部服務與贊助連結集中設定檔
+ */
 export const KAIROS_CONFIG = {
   brandName: 'Kairos Digital Lab',
   productName: '題庫練習室',
-  version: 'v1.3 Modular Workspace',
+  version: 'v1.4 Workspace',
   contactEmail: 'contact@kairos-lab.tw',
   feedbackFormUrl: 'https://forms.gle/5MBmjGSrtCzFdZCs6',
   tipLinks: [

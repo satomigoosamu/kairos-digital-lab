@@ -1,15 +1,12 @@
 import React, { useState } from 'react';
 import { Copy, Check, FileJson } from 'lucide-react';
 
-/**
- * AI 工具模組（Phase 1 零 Token 成本實用版：考題轉換 Prompt 產生器）
- */
 export default function AiToolsWorkspace() {
   const [copied, setCopied] = useState(false);
   const [questionGoal, setQuestionGoal] = useState('10');
   const [focusTopic, setFocusTopic] = useState('半導體廠務工安與法規重點');
 
-  const promptTemplate = `請扮演專業命題與考題結構化助手。請根據我提供的講義或題庫內容，整理出 ${questionGoal} 題單選題（主題聚焦：${focusTopic}），並「嚴格只輸出合法 JSON 陣列」，不要包含任何 Markdown 標記說明文字，格式如下：
+  const promptTemplate = `請扮演專業命題與考題結構化助手。請根據我提供的講義或題庫內容，整理出 ${questionGoal} 題測驗題（主題聚焦：${focusTopic}），並「嚴格只輸出合法 JSON 陣列」，不要包含任何 Markdown 標記說明文字，格式如下：
 
 [
   {
@@ -26,9 +23,8 @@ export default function AiToolsWorkspace() {
 ]
 
 注意事項：
-1. answer 欄位請填寫 "A"、"B"、"C" 或 "D"。
-2. 確保每題都有 4 個選項且語意完整。
-3. 直接輸出 JSON，方便我複製貼入 Kairos 題庫練習室。`;
+1. 選擇題 answer 欄位請填寫 "A"、"B"、"C" 或 "D"；若是是非題，options 請填 ["O（正確）", "X（錯誤）"]，answer 填 "O" 或 "X"。
+2. 直接輸出純 JSON 陣列，方便我複製貼入 Kairos 題庫練習室。`;
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(promptTemplate);

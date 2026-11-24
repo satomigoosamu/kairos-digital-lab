@@ -11,6 +11,7 @@ import {
   AlertCircle,
   Shuffle,
   ListOrdered,
+  Eye,
 } from 'lucide-react';
 import {
   extractTextFromPdf,
@@ -18,6 +19,8 @@ import {
   parseQuestionsFromJson,
   SAMPLE_JSON_TEMPLATE,
 } from '../../utils/pdfParser';
+
+const OPTION_LABELS = ['A', 'B', 'C', 'D', 'E'];
 
 export default function ImportDrawer({ isOpen, onClose, onCreateProject }) {
   const [sourceTab, setSourceTab] = useState('pdf');
@@ -52,7 +55,7 @@ export default function ImportDrawer({ isOpen, onClose, onCreateProject }) {
 
   const applyParsedResult = (questions, defaultTitle) => {
     if (!questions || questions.length === 0) {
-      setErrorMsg('未能識別出標準選擇題格式。請確認題目包含題號（如 1.）與選項（如 (A) (B) (C) (D)），或改用 JSON 範本匯入。');
+      setErrorMsg('未能識別出題目格式。請確認包含題號（如 1. 或 17）與選項（(A)(B)(C)(D) 或是非題 O / X），或改用 JSON 匯入。');
       setParsedQuestions([]);
       return;
     }
@@ -167,7 +170,7 @@ export default function ImportDrawer({ isOpen, onClose, onCreateProject }) {
           </button>
         </div>
 
-        <div className="flex-1 space-y-6 overflow-y-auto px-6 py-5">
+        <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
           <div>
             <label className="mb-2 block text-xs font-medium text-slateink dark:text-zinc-400">
               選擇題庫來源格式（純瀏覽器本機運算，檔案不上傳伺服器）
@@ -217,7 +220,7 @@ export default function ImportDrawer({ isOpen, onClose, onCreateProject }) {
               onDragOver={(e) => e.preventDefault()}
               onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
-              className="group cursor-pointer rounded-xl border-2 border-dashed border-zinc-300 bg-white p-7 text-center transition hover:border-gold dark:border-zinc-700 dark:bg-obsidian-surface dark:hover:border-gold"
+              className="group cursor-pointer rounded-xl border-2 border-dashed border-zinc-300 bg-white p-6 text-center transition hover:border-gold dark:border-zinc-700 dark:bg-obsidian-surface dark:hover:border-gold"
             >
               <input
                 ref={fileInputRef}
@@ -226,14 +229,14 @@ export default function ImportDrawer({ isOpen, onClose, onCreateProject }) {
                 className="hidden"
                 onChange={(e) => handleFileUpload(e.target.files?.[0])}
               />
-              <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full border border-zinc-200 bg-paper text-charcoal transition group-hover:border-gold group-hover:text-gold dark:border-zinc-700 dark:bg-obsidian dark:text-zinc-200">
+              <div className="mx-auto mb-2.5 flex h-10 w-10 items-center justify-center rounded-full border border-zinc-200 bg-paper text-charcoal transition group-hover:border-gold group-hover:text-gold dark:border-zinc-700 dark:bg-obsidian dark:text-zinc-200">
                 <Upload className="h-5 w-5" />
               </div>
               <p className="text-sm font-medium text-charcoal dark:text-zinc-100">
                 {isParsing ? '正在本機解析 PDF 題幹與選項...' : '拖曳 PDF / JSON / TXT 題庫至此，或點擊選擇本機檔案'}
               </p>
               <p className="mt-1 text-xs text-slateink dark:text-zinc-400">
-                支援標準選擇題格式（1. 題幹、(A)(B)(C)(D) 選項、答案：A 或文末解答表）
+                支援表格型題庫、是非題（O / X）及標準選擇題（(A)(B)(C)(D)）
               </p>
             </div>
           )}
@@ -242,7 +245,7 @@ export default function ImportDrawer({ isOpen, onClose, onCreateProject }) {
             <div className="space-y-2.5">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-medium text-slateink dark:text-zinc-400">
-                  {sourceTab === 'json' ? '貼上 JSON 陣列內容' : '貼上題庫文字（含題號與選項）'}
+                  {sourceTab === 'json' ? '貼上 JSON 陣列內容' : '貼上題庫文字（支援選擇題或是非題 O / X）'}
                 </span>
                 {sourceTab === 'json' && (
                   <button
@@ -262,7 +265,7 @@ export default function ImportDrawer({ isOpen, onClose, onCreateProject }) {
                 placeholder={
                   sourceTab === 'json'
                     ? SAMPLE_JSON_TEMPLATE
-                    : '1. 進入無塵室前應先確認何種儀表？\n(A) 差壓計 (B) 溫度計 (C) 照度計 (D) 噪音計\n答案：A\n解析：維持正壓差為防止微粒入侵之關鍵。'
+                    : '17 無塵室作業人員不可直接坐臥於地板上，需鋪設 PVC 軟墊 O\n18 有發塵之虞的物品不可攜帶進入 FAB O'
                 }
                 className="w-full rounded-lg border border-zinc-300 bg-white p-3 font-mono text-xs text-charcoal focus:border-gold focus:outline-none dark:border-zinc-700 dark:bg-obsidian-surface dark:text-zinc-100"
               />
@@ -289,10 +292,36 @@ export default function ImportDrawer({ isOpen, onClose, onCreateProject }) {
                 <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
                   <CheckCircle2 className="h-4 w-4" />
                   <span className="text-xs font-semibold">
-                    成功解析 <span className="font-mono text-sm">{parsedQuestions.length}</span> 道選擇題
+                    成功切分 <span className="font-mono text-sm">{parsedQuestions.length}</span> 道獨立題目
                   </span>
                 </div>
                 <span className="font-mono text-[11px] text-slateink dark:text-zinc-400">LOCAL INDEXEDDB</span>
+              </div>
+
+              {/* 題目切分預覽區（確認每題已獨立分開，不會全部混在一起） */}
+              <div>
+                <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-charcoal dark:text-zinc-200">
+                  <Eye className="h-3.5 w-3.5 text-gold" />
+                  <span>題目切分預覽（顯示前 {Math.min(5, parsedQuestions.length)} 題）</span>
+                </div>
+                <div className="max-h-44 space-y-2 overflow-y-auto rounded-lg border border-zinc-200 bg-paper p-2.5 dark:border-zinc-800 dark:bg-obsidian">
+                  {parsedQuestions.slice(0, 5).map((q, i) => (
+                    <div
+                      key={q.id}
+                      className="rounded-md border border-zinc-200/80 bg-white p-2.5 text-xs dark:border-zinc-800 dark:bg-obsidian-surface"
+                    >
+                      <div className="mb-1 flex items-center justify-between font-mono text-[11px]">
+                        <span className="font-semibold text-gold">
+                          Q{i + 1} · {q.options.length === 2 ? '是非題' : '選擇題'}
+                        </span>
+                        <span className="text-emerald-600 dark:text-emerald-400">
+                          正解：{q.options.length === 2 ? q.options[q.answerIndex] : OPTION_LABELS[q.answerIndex]}
+                        </span>
+                      </div>
+                      <p className="line-clamp-2 text-charcoal dark:text-zinc-200">{q.question}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <div>
