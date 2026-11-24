@@ -37,7 +37,7 @@ export default function App() {
   const [activeDomain, setActiveDomain] = useState('study');
   const [projects, setProjects] = useState([]);
   const [activeTabId, setActiveTabId] = useState(null);
-  const [darkMode, setDarkMode] = useState(false);
+  const [darkMode, setDarkMode] = useState(true);
   const [isImportOpen, setIsImportOpen] = useState(false);
 
   const [renamingId, setRenamingId] = useState(null);
@@ -45,10 +45,13 @@ export default function App() {
 
   useEffect(() => {
     const prefs = loadPreferences();
-    setDarkMode(Boolean(prefs.darkMode));
+    const isDark = prefs.darkMode !== undefined ? Boolean(prefs.darkMode) : true;
+    setDarkMode(isDark);
     if (prefs.activeDomain) setActiveDomain(prefs.activeDomain);
-    if (prefs.darkMode) {
+    if (isDark) {
       document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
     }
 
     getAllProjects().then((list) => {
@@ -217,7 +220,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* 動態自訂考試分頁列（免費版最多 2 個專案） */}
         {activeDomain === 'study' && (
           <div className="border-t border-zinc-100 bg-paper/70 dark:border-zinc-800/80 dark:bg-obsidian/60">
             <div className="mx-auto flex max-w-5xl items-center justify-between gap-2 overflow-x-auto px-4 py-2 sm:px-6">

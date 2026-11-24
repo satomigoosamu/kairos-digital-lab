@@ -6,17 +6,19 @@ import {
   SlidersHorizontal,
   ChevronLeft,
   ChevronRight,
-  Flag,
+  Star,
   CheckCircle2,
   XCircle,
   Award,
   Filter,
   Trash2,
   RefreshCw,
+  Search,
 } from 'lucide-react';
 import ExamConfigPopover from './ExamConfigPopover';
 
 const OPTION_LABELS = ['A', 'B', 'C', 'D', 'E'];
+const NAV_PAGE_SIZE = 20;
 
 function buildSessionQuestions(project) {
   const all = [...project.questions];
@@ -43,10 +45,14 @@ export default function StudyWorkspace({ project, onSaveProject }) {
   const [sessionQuestions, setSessionQuestions] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState({});
-  const [flaggedIds, setFlaggedIds] = useState({});
+  const [starredIds, setStarredIds] = useState({});
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [onlyWrongFilter, setOnlyWrongFilter] = useState(true);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  // 題號預覽卡分頁（每 20 題 1 頁）與題號搜尋
+  const [navPage, setNavPage] = useState(0);
+  const [searchNumInput, setSearchNumInput] = useState('');
 
   const [autoRemoveOnCorrect, setAutoRemoveOnCorrect] = useState(true);
   const [wrongPracticeAnswers, setWrongPracticeAnswers] = useState({});
@@ -57,8 +63,10 @@ export default function StudyWorkspace({ project, onSaveProject }) {
       const qs = buildSessionQuestions(targetProject);
       setSessionQuestions(qs);
       setCurrentIndex(0);
+      setNavPage(0);
+      setSearchNumInput('');
       setAnswers({});
-      setFlaggedIds({});
+      setStarredIds({});
       setIsSubmitted(false);
       setOnlyWrongFilter(true);
       setElapsedSeconds(0);
@@ -72,6 +80,11 @@ export default function StudyWorkspace({ project, onSaveProject }) {
       setWrongPracticeAnswers({});
     }
   }, [project?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 切換題目時，題號預覽卡自動翻到該題所在的分頁（每 20 題 1 頁）
+  useEffect(() => {
+    setNavPage(Math.floor(currentIndex / NAV_PAGE_SIZE));
+  }, [currentIndex]);
 
   useEffect(() => {
     if (mode !== 'mock' || isSubmitted || sessionQuestions.length === 0) return;
@@ -128,6 +141,16 @@ export default function StudyWorkspace({ project, onSaveProject }) {
     if (mode === 'practice' && optionIdx !== currentQuestion.answerIndex) {
       recordWrongQuestions([currentQuestion.id]);
     }
+  };
+
+  const handleJumpToQuestion = (e) => {
+    e.preventDefault();
+    const num = parseInt(searchNumInput, 10);
+    if (!Number.isFinite(num) || num < 1 || num > sessionQuestions.length) return;
+    const targetIdx = num - 1;
+    setCurrentIndex(targetIdx);
+    setNavPage(Math.floor(targetIdx / NAV_PAGE_SIZE));
+    setSearchNumInput('');
   };
 
   useEffect(() => {
@@ -206,6 +229,12 @@ export default function StudyWorkspace({ project, onSaveProject }) {
 
   const answeredCount = sessionQuestions.filter((q) => answers[q.id] !== undefined).length;
   const progressPct = sessionQuestions.length > 0 ? Math.round((answeredCount / sessionQuestions.length) * 100) : 0;
+
+  // 題號預覽卡分頁計算（每 20 題 1 頁）
+  const totalNavPages = Math.max(1, Math.ceil(sessionQuestions.length / NAV_PAGE_SIZE));
+  const safeNavPage = Math.min(navPage, totalNavPages - 1);
+  const pageStartIdx = safeNavPage * NAV_PAGE_SIZE;
+  const pageQuestions = sessionQuestions.slice(pageStartIdx, pageStartIdx + NAV_PAGE_SIZE);
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6">
@@ -468,22 +497,23 @@ export default function StudyWorkspace({ project, onSaveProject }) {
                 <h2 className="text-base font-semibold leading-relaxed text-charcoal dark:text-zinc-100 sm:text-lg">
                   {currentQuestion.question}
                 </h2>
+                {/* 星號標記按鈕 */}
                 <button
                   type="button"
                   onClick={() =>
-                    setFlaggedIds((prev) => ({
+                    setStarredIds((prev) => ({
                       ...prev,
                       [currentQuestion.id]: !prev[currentQuestion.id],
                     }))
                   }
-                  title="標記此題稍後檢查"
+                  title="星號標記此題稍後檢查"
                   className={`shrink-0 rounded-lg border p-2 transition ${
-                    flaggedIds[currentQuestion.id]
+                    starredIds[currentQuestion.id]
                       ? 'border-gold bg-gold-muted text-gold'
-                      : 'border-zinc-200 text-zinc-400 hover:text-charcoal dark:border-zinc-700'
+                      : 'border-zinc-200 text-zinc-400 hover:text-gold dark:border-zinc-700'
                   }`}
                 >
-                  <Flag className="h-4 w-4" />
+                  <Star className={`h-4 w-4 ${starredIds[currentQuestion.id] ? 'fill-gold text-gold' : ''}`} />
                 </button>
               </div>
 
@@ -598,15 +628,39 @@ export default function StudyWorkspace({ project, onSaveProject }) {
             </div>
           </div>
 
+          {/* 右側題號預覽卡（每 20 題 1 頁 + 題號搜尋跳轉） */}
           <div className="lg:col-span-4">
             <div className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-obsidian-surface">
               <div className="mb-3 flex items-center justify-between">
-                <span className="text-xs font-semibold text-charcoal dark:text-zinc-100">題號導覽卡</span>
+                <span className="text-xs font-semibold text-charcoal dark:text-zinc-100">題號預覽卡</span>
                 <span className="font-mono text-xs text-slateink dark:text-zinc-400">
                   {answeredCount}/{sessionQuestions.length}
                 </span>
               </div>
 
+              {/* 搜尋題號快速跳轉 */}
+              <form onSubmit={handleJumpToQuestion} className="mb-3 flex items-center gap-1.5">
+                <div className="relative flex-1">
+                  <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
+                  <input
+                    type="number"
+                    min={1}
+                    max={sessionQuestions.length}
+                    value={searchNumInput}
+                    onChange={(e) => setSearchNumInput(e.target.value)}
+                    placeholder={`搜尋題號 (1-${sessionQuestions.length})`}
+                    className="w-full rounded-lg border border-zinc-200 bg-paper py-1.5 pl-8 pr-2 font-mono text-xs text-charcoal focus:border-gold focus:outline-none dark:border-zinc-700 dark:bg-obsidian dark:text-zinc-100"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="shrink-0 rounded-lg border border-zinc-300 bg-paper px-2.5 py-1.5 text-xs font-medium text-charcoal transition hover:border-gold hover:text-gold dark:border-zinc-700 dark:bg-obsidian dark:text-zinc-200"
+                >
+                  跳轉
+                </button>
+              </form>
+
+              {/* 圖例 */}
               <div className="mb-3 flex flex-wrap items-center gap-3 text-[11px] text-slateink dark:text-zinc-400">
                 <span className="flex items-center gap-1">
                   <span className="h-2.5 w-2.5 rounded-sm bg-charcoal dark:bg-zinc-200" />
@@ -617,16 +671,18 @@ export default function StudyWorkspace({ project, onSaveProject }) {
                   未作答
                 </span>
                 <span className="flex items-center gap-1">
-                  <span className="h-2.5 w-2.5 rounded-sm bg-gold" />
-                  待確認標記
+                  <Star className="h-3 w-3 fill-gold text-gold" />
+                  星號標記
                 </span>
               </div>
 
-              <div className="grid grid-cols-6 gap-1.5 sm:grid-cols-8 lg:grid-cols-5">
-                {sessionQuestions.map((q, idx) => {
-                  const isCurrent = idx === currentIndex;
+              {/* 每頁 20 題矩陣 */}
+              <div className="grid grid-cols-5 gap-1.5">
+                {pageQuestions.map((q, localIdx) => {
+                  const globalIdx = pageStartIdx + localIdx;
+                  const isCurrent = globalIdx === currentIndex;
                   const isDone = answers[q.id] !== undefined;
-                  const isFlagged = flaggedIds[q.id];
+                  const isStarred = starredIds[q.id];
 
                   let btnClass =
                     'border-zinc-200 bg-paper text-slateink hover:border-zinc-400 dark:border-zinc-800 dark:bg-obsidian dark:text-zinc-400';
@@ -635,7 +691,7 @@ export default function StudyWorkspace({ project, onSaveProject }) {
                     btnClass =
                       'border-charcoal bg-charcoal text-white dark:border-zinc-200 dark:bg-zinc-200 dark:text-charcoal';
                   }
-                  if (isFlagged) {
+                  if (isStarred) {
                     btnClass = 'border-gold bg-gold-muted font-bold text-charcoal dark:text-gold';
                   }
 
@@ -643,22 +699,52 @@ export default function StudyWorkspace({ project, onSaveProject }) {
                     <button
                       key={q.id}
                       type="button"
-                      onClick={() => setCurrentIndex(idx)}
+                      onClick={() => setCurrentIndex(globalIdx)}
                       className={`relative flex h-9 items-center justify-center rounded-lg border font-mono text-xs transition ${btnClass} ${
                         isCurrent ? 'ring-2 ring-gold ring-offset-1 dark:ring-offset-obsidian-surface' : ''
                       }`}
                     >
-                      {idx + 1}
+                      {globalIdx + 1}
+                      {isStarred && (
+                        <Star className="absolute right-0.5 top-0.5 h-2.5 w-2.5 fill-gold text-gold" />
+                      )}
                     </button>
                   );
                 })}
               </div>
 
+              {/* 每 20 題分頁切換列 */}
+              {totalNavPages > 1 && (
+                <div className="mt-3 flex items-center justify-between border-t border-zinc-100 pt-2.5 font-mono text-[11px] text-slateink dark:border-zinc-800 dark:text-zinc-400">
+                  <button
+                    type="button"
+                    disabled={safeNavPage === 0}
+                    onClick={() => setNavPage((p) => Math.max(0, p - 1))}
+                    className="inline-flex items-center gap-0.5 rounded border border-zinc-200 px-2 py-1 transition hover:border-gold disabled:opacity-35 dark:border-zinc-700"
+                  >
+                    <ChevronLeft className="h-3 w-3" />
+                    上20題
+                  </button>
+                  <span>
+                    {pageStartIdx + 1}-{Math.min(pageStartIdx + NAV_PAGE_SIZE, sessionQuestions.length)} 題 · 第 {safeNavPage + 1}/{totalNavPages} 頁
+                  </span>
+                  <button
+                    type="button"
+                    disabled={safeNavPage >= totalNavPages - 1}
+                    onClick={() => setNavPage((p) => Math.min(totalNavPages - 1, p + 1))}
+                    className="inline-flex items-center gap-0.5 rounded border border-zinc-200 px-2 py-1 transition hover:border-gold disabled:opacity-35 dark:border-zinc-700"
+                  >
+                    下20題
+                    <ChevronRight className="h-3 w-3" />
+                  </button>
+                </div>
+              )}
+
               {mode === 'mock' && (
                 <button
                   type="button"
                   onClick={handleSubmitMockExam}
-                  className="mt-5 flex w-full items-center justify-center gap-1.5 rounded-xl bg-gold py-2.5 text-xs font-bold text-charcoal transition hover:bg-gold-hover"
+                  className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-xl bg-gold py-2.5 text-xs font-bold text-charcoal transition hover:bg-gold-hover"
                 >
                   <ClipboardCheck className="h-4 w-4" />
                   提前交卷 ({answeredCount}/{sessionQuestions.length})

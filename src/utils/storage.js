@@ -1,12 +1,12 @@
 /**
  * Kairos Digital Lab — 本機優先儲存引擎 (IndexedDB + LocalStorage)
- * 免費版最多保留 2 個考試工作區分頁，無預設示範題庫
+ * 免費版最多保留 2 個考試工作區分頁，首次進入預設為深色考場模式
  */
 
 const DB_NAME = 'KairosStudyLabDB_v2';
 const DB_VERSION = 1;
 const STORE_PROJECTS = 'exam_projects';
-const PREFS_KEY = 'kairos_study_prefs_v2';
+const PREFS_KEY = 'kairos_study_prefs_v3';
 
 export const MAX_FREE_PROJECTS = 2;
 
@@ -65,10 +65,10 @@ export async function deleteProjectById(id) {
 export function loadPreferences() {
   try {
     const raw = localStorage.getItem(PREFS_KEY);
-    if (!raw) return { darkMode: false, activeTabId: null, activeDomain: 'study' };
-    return { darkMode: false, activeTabId: null, activeDomain: 'study', ...JSON.parse(raw) };
+    if (!raw) return { darkMode: true, activeTabId: null, activeDomain: 'study' };
+    return { darkMode: true, activeTabId: null, activeDomain: 'study', ...JSON.parse(raw) };
   } catch {
-    return { darkMode: false, activeTabId: null, activeDomain: 'study' };
+    return { darkMode: true, activeTabId: null, activeDomain: 'study' };
   }
 }
 

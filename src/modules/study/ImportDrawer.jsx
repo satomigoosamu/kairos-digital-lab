@@ -9,13 +9,14 @@ import {
   SlidersHorizontal,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   Shuffle,
   ListOrdered,
   Eye,
 } from 'lucide-react';
 import {
   extractTextFromPdf,
-  parseQuestionsFromText,
+  parseQuestionsWithDiagnostics,
   parseQuestionsFromJson,
   SAMPLE_JSON_TEMPLATE,
 } from '../../utils/pdfParser';
@@ -27,6 +28,7 @@ export default function ImportDrawer({ isOpen, onClose, onCreateProject }) {
   const [projectTitle, setProjectTitle] = useState('');
   const [rawText, setRawText] = useState('');
   const [parsedQuestions, setParsedQuestions] = useState([]);
+  const [missingNumbers, setMissingNumbers] = useState([]);
   const [isParsing, setIsParsing] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -42,6 +44,7 @@ export default function ImportDrawer({ isOpen, onClose, onCreateProject }) {
     setProjectTitle('');
     setRawText('');
     setParsedQuestions([]);
+    setMissingNumbers([]);
     setErrorMsg('');
     setQuestionCount(0);
     setPassingScore(80);
@@ -53,14 +56,19 @@ export default function ImportDrawer({ isOpen, onClose, onCreateProject }) {
     onClose();
   };
 
-  const applyParsedResult = (questions, defaultTitle) => {
+  const applyParsedResult = (resultObj, defaultTitle) => {
+    const questions = Array.isArray(resultObj) ? resultObj : resultObj.questions;
+    const missing = Array.isArray(resultObj) ? [] : (resultObj.missingNumbers || []);
+
     if (!questions || questions.length === 0) {
-      setErrorMsg('未能識別出題目格式。請確認包含題號（如 1. 或 17）與選項（(A)(B)(C)(D) 或是非題 O / X），或改用 JSON 匯入。');
+      setErrorMsg('未能識別出題目格式。請確認包含題號（如 1. 或 17）與選項（(1)(2)(3)(4)、(A)(B)(C)(D) 或是非題 O / X），或改用 JSON 匯入。');
       setParsedQuestions([]);
+      setMissingNumbers([]);
       return;
     }
     setErrorMsg('');
     setParsedQuestions(questions);
+    setMissingNumbers(missing);
     setQuestionCount(questions.length);
     if (!projectTitle.trim() && defaultTitle) {
       setProjectTitle(defaultTitle.replace(/\.(pdf|json|txt)$/i, ''));
@@ -75,16 +83,16 @@ export default function ImportDrawer({ isOpen, onClose, onCreateProject }) {
       const ext = file.name.split('.').pop().toLowerCase();
       if (ext === 'pdf') {
         const text = await extractTextFromPdf(file);
-        const questions = parseQuestionsFromText(text);
-        applyParsedResult(questions, file.name);
+        const result = parseQuestionsWithDiagnostics(text);
+        applyParsedResult(result, file.name);
       } else if (ext === 'json') {
         const text = await file.text();
         const questions = parseQuestionsFromJson(text);
         applyParsedResult(questions, file.name);
       } else {
         const text = await file.text();
-        const questions = parseQuestionsFromText(text);
-        applyParsedResult(questions, file.name);
+        const result = parseQuestionsWithDiagnostics(text);
+        applyParsedResult(result, file.name);
       }
     } catch (err) {
       setErrorMsg(`檔案解析失敗：${err.message || '請確認檔案未加密且格式正確'}`);
@@ -106,8 +114,8 @@ export default function ImportDrawer({ isOpen, onClose, onCreateProject }) {
         const qs = parseQuestionsFromJson(rawText);
         applyParsedResult(qs, '自訂 JSON 題庫');
       } else {
-        const qs = parseQuestionsFromText(rawText);
-        applyParsedResult(qs, '自訂文字題庫');
+        const result = parseQuestionsWithDiagnostics(rawText);
+        applyParsedResult(result, '自訂文字題庫');
       }
     } catch (err) {
       setErrorMsg(`格式解析錯誤：${err.message}`);
@@ -236,7 +244,7 @@ export default function ImportDrawer({ isOpen, onClose, onCreateProject }) {
                 {isParsing ? '正在本機解析 PDF 題幹與選項...' : '拖曳 PDF / JSON / TXT 題庫至此，或點擊選擇本機檔案'}
               </p>
               <p className="mt-1 text-xs text-slateink dark:text-zinc-400">
-                支援表格型題庫、是非題（O / X）及標準選擇題（(A)(B)(C)(D)）
+                支援表格型題庫、(1)(2)(3)(4) 選擇題、(A)(B)(C)(D) 選擇題及是非題（O / X）
               </p>
             </div>
           )}
@@ -265,7 +273,7 @@ export default function ImportDrawer({ isOpen, onClose, onCreateProject }) {
                 placeholder={
                   sourceTab === 'json'
                     ? SAMPLE_JSON_TEMPLATE
-                    : '17 無塵室作業人員不可直接坐臥於地板上，需鋪設 PVC 軟墊 O\n18 有發塵之虞的物品不可攜帶進入 FAB O'
+                    : '35 選擇風險控制措施時應優先選擇下列何者？(1) 個人防護具 (2) 工程控制 (3) 管理控制 (4) 消除 4'
                 }
                 className="w-full rounded-lg border border-zinc-300 bg-white p-3 font-mono text-xs text-charcoal focus:border-gold focus:outline-none dark:border-zinc-700 dark:bg-obsidian-surface dark:text-zinc-100"
               />
@@ -298,13 +306,28 @@ export default function ImportDrawer({ isOpen, onClose, onCreateProject }) {
                 <span className="font-mono text-[11px] text-slateink dark:text-zinc-400">LOCAL INDEXEDDB</span>
               </div>
 
-              {/* 題目切分預覽區（確認每題已獨立分開，不會全部混在一起） */}
+              {/* 若原始題號有跳號，主動提示缺少哪幾題 */}
+              {missingNumbers.length > 0 && missingNumbers.length <= 15 && (
+                <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-300">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+                  <div>
+                    <span className="font-semibold">題號連續性提示：</span>
+                    原文件題號序列中缺少{' '}
+                    <span className="font-mono font-bold">
+                      {missingNumbers.map((n) => `第 ${n} 題`).join('、')}
+                    </span>
+                    （可能為跨頁格式異常或非題目列）。
+                  </div>
+                </div>
+              )}
+
+              {/* 題目與選項切分預覽區 */}
               <div>
                 <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-charcoal dark:text-zinc-200">
                   <Eye className="h-3.5 w-3.5 text-gold" />
-                  <span>題目切分預覽（顯示前 {Math.min(5, parsedQuestions.length)} 題）</span>
+                  <span>題目與選項預覽（顯示前 {Math.min(5, parsedQuestions.length)} 題）</span>
                 </div>
-                <div className="max-h-44 space-y-2 overflow-y-auto rounded-lg border border-zinc-200 bg-paper p-2.5 dark:border-zinc-800 dark:bg-obsidian">
+                <div className="max-h-48 space-y-2 overflow-y-auto rounded-lg border border-zinc-200 bg-paper p-2.5 dark:border-zinc-800 dark:bg-obsidian">
                   {parsedQuestions.slice(0, 5).map((q, i) => (
                     <div
                       key={q.id}
@@ -312,10 +335,10 @@ export default function ImportDrawer({ isOpen, onClose, onCreateProject }) {
                     >
                       <div className="mb-1 flex items-center justify-between font-mono text-[11px]">
                         <span className="font-semibold text-gold">
-                          Q{i + 1} · {q.options.length === 2 ? '是非題' : '選擇題'}
+                          Q{i + 1} · {q.options.length} 個選項
                         </span>
                         <span className="text-emerald-600 dark:text-emerald-400">
-                          正解：{q.options.length === 2 ? q.options[q.answerIndex] : OPTION_LABELS[q.answerIndex]}
+                          正解：{OPTION_LABELS[q.answerIndex]} ({q.options[q.answerIndex]?.slice(0, 12)})
                         </span>
                       </div>
                       <p className="line-clamp-2 text-charcoal dark:text-zinc-200">{q.question}</p>

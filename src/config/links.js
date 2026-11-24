@@ -4,7 +4,7 @@
 export const KAIROS_CONFIG = {
   brandName: 'Kairos Digital Lab',
   productName: '題庫練習室',
-  version: 'v1.4 Workspace',
+  version: 'v1.5 Workspace',
   contactEmail: 'contact@kairos-lab.tw',
   feedbackFormUrl: 'https://forms.gle/5MBmjGSrtCzFdZCs6',
   tipLinks: [

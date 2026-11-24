@@ -8,13 +8,9 @@ function fmt(num) {
   return Number(num.toPrecision(4)).toString();
 }
 
-/**
- * 工程工具模組（日常現場實用版：雙向即時長度、面積、重量、壓力與溫度換算）
- */
 export default function EngineeringWorkspace() {
   const [copiedKey, setCopiedKey] = useState('');
 
-  // 1. 長度換算（基準單位：mm）
   const [lengthMm, setLengthMm] = useState(1000);
   const lengthUnits = [
     { id: 'mm', label: '公釐 (mm)', factor: 1 },
@@ -25,7 +21,6 @@ export default function EngineeringWorkspace() {
     { id: 'fen', label: '台制 / 管件「分」(1/8吋)', factor: 3.175 },
   ];
 
-  // 2. 面積換算（基準單位：m²）
   const [areaSqm, setAreaSqm] = useState(33.0579);
   const areaUnits = [
     { id: 'sqm', label: '平方公尺 (m²)', factor: 1 },
@@ -34,7 +29,6 @@ export default function EngineeringWorkspace() {
     { id: 'sqcm', label: '平方公分 (cm²)', factor: 0.0001 },
   ];
 
-  // 3. 重量換算（基準單位：kg）
   const [weightKg, setWeightKg] = useState(100);
   const weightUnits = [
     { id: 'g', label: '公克 (g)', factor: 0.001 },
@@ -43,7 +37,6 @@ export default function EngineeringWorkspace() {
     { id: 'lb', label: '磅 (lb)', factor: 0.45359237 },
   ];
 
-  // 4. 壓力換算（基準單位：kgf/cm²，現場壓力錶最常用）
   const [pressKgf, setPressKgf] = useState(1);
   const pressureUnits = [
     { id: 'kgf', label: 'kgf/cm²（公斤力）', factor: 1 },
@@ -53,7 +46,6 @@ export default function EngineeringWorkspace() {
     { id: 'mpa', label: 'MPa', factor: 10.19716 },
   ];
 
-  // 5. 溫度換算（基準單位：°C）
   const [tempC, setTempC] = useState(25);
 
   const handleCopy = async (key, val) => {
@@ -77,7 +69,6 @@ export default function EngineeringWorkspace() {
       </div>
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        {/* 1. 長度換算 */}
         <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-obsidian-surface">
           <div className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -120,7 +111,6 @@ export default function EngineeringWorkspace() {
             })}
           </div>
 
-          {/* 現場管徑快速點選 */}
           <div className="mt-3.5 flex flex-wrap items-center gap-1.5 border-t border-zinc-100 pt-3 dark:border-zinc-800">
             <span className="text-[11px] text-slateink dark:text-zinc-400">常用管徑速填：</span>
             {[
@@ -142,7 +132,6 @@ export default function EngineeringWorkspace() {
           </div>
         </div>
 
-        {/* 2. 面積換算 */}
         <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-obsidian-surface">
           <div className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -200,7 +189,6 @@ export default function EngineeringWorkspace() {
           </div>
         </div>
 
-        {/* 3. 重量換算 */}
         <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-obsidian-surface">
           <div className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -244,7 +232,6 @@ export default function EngineeringWorkspace() {
           </div>
         </div>
 
-        {/* 4. 壓力錶與溫度常用換算 */}
         <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-obsidian-surface">
           <div className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -279,7 +266,6 @@ export default function EngineeringWorkspace() {
             })}
           </div>
 
-          {/* 溫度換算 */}
           <div className="mt-4 grid grid-cols-2 gap-3 border-t border-zinc-100 pt-3.5 dark:border-zinc-800">
             <div>
               <label className="mb-1 block text-[11px] text-slateink dark:text-zinc-400">攝氏溫度 (°C)</label>

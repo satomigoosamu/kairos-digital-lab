@@ -1,10 +1,10 @@
 /**
- * Kairos Digital Lab — 強化版智慧題庫解析器 (支援表格型 PDF、是非題 O/X、選擇題 A-D、JSON)
- * 解決痛點：
- * 1. 自動過濾 PDF 頁首/頁尾雜訊（如 Micron Confidential、# Item content Ans 題目修正 答案）
- * 2. 依 PDF 座標 (Y 軸分列 + X 軸排序) 精準還原表格每一列
- * 3. 支援無標點題號（如 "17 無塵室..."、"18 有發塵..."）與連續同行題目自動切分
- * 4. 同時支援「是非題 (O / X)」與「選擇題 ((A)(B)(C)(D) / A.B.C.D / (1)-(4))」
+ * Kairos Digital Lab — 高精準智慧題庫解析器 v1.5
+ * 針對實測問題全面升級：
+ * 1. 修正無空白黏連選項（如「？(1) 個人防護具 (2) 工程控制」不再把 (1) 吃進題幹）
+ * 2. 修正表格答案欄在「Answer / Ans」表頭前的格式（如「...高架地板作業 2 Answer」精準擷取答案 2 並清除雜訊）
+ * 3. 支援題幹以數字或引號開頭（如「45 2公尺以上...」、「60 110V...」、「72 《職業安全...」），避免 100 題漏抓 1 題
+ * 4. 回傳缺失題號診斷資訊 (missingNumbers)，若原卷 1..100 少題可直接提示缺哪一題
  */
 import * as pdfjsLib from 'pdfjs-dist';
 
@@ -20,7 +20,6 @@ export async function extractTextFromPdf(file) {
     const page = await pdf.getPage(pageNum);
     const content = await page.getTextContent();
 
-    // 收集帶有座標的文字片段
     const items = content.items
       .filter((item) => 'str' in item && item.str.trim() !== '')
       .map((item) => ({
@@ -30,7 +29,6 @@ export async function extractTextFromPdf(file) {
         width: item.width || 0,
       }));
 
-    // 依 Y 軸由上往下排序，同一列 (Y 差距 <= 4) 依 X 軸由左往右排序
     items.sort((a, b) => {
       if (Math.abs(a.y - b.y) > 4) {
         return b.y - a.y;
@@ -86,16 +84,57 @@ const TF_FALSE_SET = new Set(['X', '✕', '✖', '×', '錯', '否', 'FALSE', 'F
 
 function cleanPdfNoise(text) {
   return text
-    // 移除常見機密浮水印與表格標頭
     .replace(/#?\s*Micron\s+Confidential/gi, ' ')
-    .replace(/#?\s*Item\s+content\s+Ans(?:\s+題目修正\s+答案)?/gi, ' ')
+    .replace(/#?\s*Item\s+content\s+Ans(?:wer)?(?:\s+題目修正\s+答案)?/gi, ' ')
     .replace(/(?:題號|題目內容|題幹|標準答案|參考答案)\s+(?:選項|答案|解析)/g, ' ')
     .replace(/Page\s+\d+\s+(?:of|\/)\s+\d+/gi, ' ')
     .replace(/第\s*\d+\s*頁\s*(?:共\s*\d+\s*頁)?/g, ' ');
 }
 
-export function parseQuestionsFromText(rawText) {
-  if (!rawText || !rawText.trim()) return [];
+/**
+ * 切分題目內部的選擇題選項，不要求選項標記前必須有空白（解決「？(1) 個人防護具」黏在一起的問題）
+ */
+function extractChoiceOptions(text) {
+  // 策略 1：括號數字 (1) (2) (3) (4) — 允許前面緊貼「？」或中文字，且允許括號內有空白如 ( 1 )
+  const parenNumMatches = [...text.matchAll(/\(\s*([1-5])\s*\)\s*/g)];
+  if (parenNumMatches.length >= 2) {
+    // 確保是從 (1) 開始的選項序列（避免題幹裡出現單一括號數字干擾）
+    const firstOneIdx = parenNumMatches.findIndex((m) => m[1] === '1');
+    const validMatches = firstOneIdx >= 0 ? parenNumMatches.slice(firstOneIdx) : parenNumMatches;
+    if (validMatches.length >= 2) {
+      return validMatches;
+    }
+  }
+
+  // 策略 2：括號英文字母 (A) (B) (C) (D) — 同樣不強制要求前面有空白
+  const parenAlphaMatches = [...text.matchAll(/\(\s*([A-E])\s*\)\s*/gi)];
+  if (parenAlphaMatches.length >= 2) {
+    const firstAIdx = parenAlphaMatches.findIndex((m) => m[1].toUpperCase() === 'A');
+    const validMatches = firstAIdx >= 0 ? parenAlphaMatches.slice(firstAIdx) : parenAlphaMatches;
+    if (validMatches.length >= 2) {
+      return validMatches;
+    }
+  }
+
+  // 策略 3：帶標點英文字母 A. / B、 / C) / D： 或圈號 ①②③④
+  const punctAlphaMatches = [...text.matchAll(/(?:^|\s|(?<=[？?。！!；;]))(?:([A-E])[.、:：\)]|([①-⑤]))\s*/gi)];
+  if (punctAlphaMatches.length >= 2) {
+    return punctAlphaMatches;
+  }
+
+  // 策略 4：無左括號數字選項 1) 2) 3) 4)
+  const rightParenNumMatches = [...text.matchAll(/(?:^|\s|(?<=[？?。！!；;]))([1-5])[\)）、]\s*/g)];
+  if (rightParenNumMatches.length >= 2) {
+    return rightParenNumMatches;
+  }
+
+  return [];
+}
+
+export function parseQuestionsWithDiagnostics(rawText) {
+  if (!rawText || !rawText.trim()) {
+    return { questions: [], missingNumbers: [], maxDetectedNumber: 0 };
+  }
 
   let normalized = cleanPdfNoise(rawText)
     .replace(/\r\n/g, '\n')
@@ -119,13 +158,14 @@ export function parseQuestionsFromText(rawText) {
     }
   }
 
-  // 2. 預處理：若多題被擠在同一行（例如 "... O 18 有發塵之虞..." 或 "... 以上皆是 4 17 無塵室..."），在題號前強制插入換行
+  // 2. 預處理：若多題被擠在同一行，在下一題題號前強制插入換行
+  // 支援前面是答案 (O/X/A-D/1-4)、括號答案、句號/問號，或換頁標頭 "Answer" 之後緊接下一題題號
   normalized = normalized.replace(
-    /(?:(?<=\s[A-DOX○✕1-4])|(?<=\([A-D1-4]\))|(?<=[。．.?!])\s*(?:[1-4]\s+)?)\s+(?=(?:第\s*)?\d{1,4}\s*[.、:：)\]]?\s*[\u4e00-\u9fa5A-Za-z「『【（(])/g,
+    /(?:(?<=\s[A-DOX○✕1-4])|(?<=\([A-D1-4]\))|(?<=\bAnswer)|(?<=\bAns)|(?<=[。．.?!？]))\s+(?=(?:第\s*)?\d{1,4}\s*[.、:：)\]]?\s*[^\s\)\]])/gi,
     '\n'
   );
 
-  // 3. 逐行切分題目區塊：同時支援「有標點題號 (1. / 1、 / (1))」與「無標點表格題號 (17 無塵室...)」
+  // 3. 逐行切分題目區塊：支援無標點表格題號（包含題幹以數字、引號、書名號或中文開頭，及 3 位數 100 無空白緊接中文）
   const lines = normalized
     .split('\n')
     .map((l) => l.replace(/\s+/g, ' ').trim())
@@ -134,15 +174,16 @@ export function parseQuestionsFromText(rawText) {
   const blocks = [];
   let currentBlock = null;
 
-  const qStartRegex = /^(?:[\(\[【]([A-E1-5OX○✕])[\)\]】]\s*)?(?:第\s*(\d{1,4})\s*題|\(?(\d{1,4})\)?\s*[.、:：\)\]]|(\d{1,4})\s+(?=[\u4e00-\u9fa5A-Za-z「『【（(])|Q\s*(\d{1,4})\s*[.、:：]?)\s*(.+)$/i;
+  const qStartRegex =
+    /^(?:[\(\[【]([A-E1-5OX○✕])[\)\]】]\s*)?(?:第\s*(\d{1,4})\s*題|\(?(\d{1,4})\)?\s*[.、:：\)\]]|(\d{1,4})\s+(?=[^\s])|(\d{3})(?=[\u4e00-\u9fa5「『《【（(])|Q\s*(\d{1,4})\s*[.、:：]?)\s*(.+)$/i;
 
   for (const line of lines) {
-    if (/^(?:標準答案|參考答案|解答表|附錄答案)\s*:?$/i.test(line)) {
-      break;
+    if (/^(?:標準答案|參考答案|解答表|附錄答案|Answer|Ans)\s*:?$/i.test(line)) {
+      continue;
     }
 
     const match = line.match(qStartRegex);
-    const detectedNumStr = match ? (match[2] || match[3] || match[4] || match[5]) : null;
+    const detectedNumStr = match ? (match[2] || match[3] || match[4] || match[5] || match[6]) : null;
     const detectedNum = detectedNumStr ? parseInt(detectedNumStr, 10) : null;
 
     // 避免將選項 (1) (2) (3) (4) 誤判為新題號
@@ -151,16 +192,24 @@ export function parseQuestionsFromText(rawText) {
       detectedNum !== null &&
       detectedNum >= 1 &&
       detectedNum <= 4 &&
-      /^\(\d\)/.test(line) &&
+      /^\(\s*\d\s*\)/.test(line) &&
       currentBlock.qNum !== detectedNum - 1;
 
-    // 若前一個區塊尚未結束，且新偵測到的無標點數字明顯不合理（例如題幹內的數字 "4 17" 中的 4 已被剝離，17 為真正題號）
-    if (match && !isLikelyOptionNumber) {
+    // 若前一個區塊已有題號，且新出現的數字與目前題號相差過遠（例如題幹內出現「2 公尺」被誤認成第 2 題，而上一題已經是第 45 題）
+    const isOutOfSequenceBodyNumber =
+      currentBlock &&
+      currentBlock.qNum !== null &&
+      detectedNum !== null &&
+      !/^(?:第|\(|Q)/i.test(line) &&
+      !/^\d{1,4}\s*[.、:：\)\]]/.test(line) &&
+      (detectedNum < currentBlock.qNum || detectedNum > currentBlock.qNum + 15);
+
+    if (match && !isLikelyOptionNumber && !isOutOfSequenceBodyNumber) {
       if (currentBlock) blocks.push(currentBlock);
       const leadingAns = match[1] ? match[1].toUpperCase() : null;
       currentBlock = {
         qNum: detectedNum,
-        rawLines: [match[6]],
+        rawLines: [match[7]],
         inlineAnswer: leadingAns,
       };
     } else if (currentBlock) {
@@ -170,6 +219,7 @@ export function parseQuestionsFromText(rawText) {
   if (currentBlock) blocks.push(currentBlock);
 
   const parsedQuestions = [];
+  const seenNumbers = new Set();
 
   for (let idx = 0; idx < blocks.length; idx++) {
     const block = blocks[idx];
@@ -184,41 +234,49 @@ export function parseQuestionsFromText(rawText) {
       bodyWithoutExp = fullText.slice(0, expMatch.index).trim();
     }
 
-    // 擷取內嵌答案
+    // 擷取內嵌答案：支援「答案：2」、「答案 2」、「Ans: B」、「Ans 2」、「Answer 2」以及「2 Answer」（答案數字在 Answer 表頭前！）
     let rawAnswerToken = block.inlineAnswer;
-    const inlineAnsMatch = bodyWithoutExp.match(/(?:【?正確?答案】?|【?正解】?|Ans)\s*:\s*\(?([A-E1-5①-⑤OX○✕對錯是否])\)?/i);
+
+    // 情況 1：答案數字/字母緊跟在 Answer / Ans / 答案 表頭前面（例如 "...高架地板作業 2 Answer"）
+    const beforeHeaderAnsMatch = bodyWithoutExp.match(/\s+\(?([A-E1-5OX○✕])\)?\s+(?:Answer|Ans|答案|正解)\b/i);
+    if (beforeHeaderAnsMatch) {
+      rawAnswerToken = beforeHeaderAnsMatch[1].toUpperCase();
+      bodyWithoutExp = bodyWithoutExp.replace(beforeHeaderAnsMatch[0], ' ').trim();
+    }
+
+    // 情況 2：標準「答案：A」或「Answer: 2」或「Ans 2」（冒號改為可選）
+    const inlineAnsMatch = bodyWithoutExp.match(/(?:【?正確?答案】?|【?正解】?|Answer|Ans)\s*[:：]?\s*\(?([A-E1-5①-⑤OX○✕對錯是否])\)?/i);
     if (inlineAnsMatch) {
       rawAnswerToken = inlineAnsMatch[1].toUpperCase();
-      bodyWithoutExp = bodyWithoutExp.replace(inlineAnsMatch[0], '').trim();
+      bodyWithoutExp = bodyWithoutExp.replace(inlineAnsMatch[0], ' ').trim();
     }
+
+    // 清除殘留的單獨表格欄位名稱 Answer / Ans
+    bodyWithoutExp = bodyWithoutExp.replace(/\s+\b(?:Answer|Ans)\b\s*$/i, '').trim();
 
     if (!rawAnswerToken && block.qNum && block.qNum in answerKeyMap) {
       rawAnswerToken = answerKeyMap[block.qNum];
     }
 
-    // 嘗試切分選擇題選項：(A)(B)(C)(D) / A. B. C. D. / ①②③④ / (1)(2)(3)(4)
-    let optPattern = /(?:^|\s)(?:\(([A-D])\)|([A-D])[.、\)]|([①-④]))\s*/g;
-    let matches = [...bodyWithoutExp.matchAll(optPattern)];
-
-    if (matches.length < 2) {
-      optPattern = /(?:^|\s)\(([1-4])\)\s*/g;
-      matches = [...bodyWithoutExp.matchAll(optPattern)];
-    }
+    // 切分選擇題選項
+    const matches = extractChoiceOptions(bodyWithoutExp);
 
     if (matches.length >= 2) {
-      // 【情況 A：選擇題】
       const questionStem = bodyWithoutExp.slice(0, matches[0].index).trim();
       const options = [];
       for (let i = 0; i < matches.length; i++) {
         const start = matches[i].index + matches[i][0].length;
         const end = i + 1 < matches.length ? matches[i + 1].index : bodyWithoutExp.length;
         let optText = bodyWithoutExp.slice(start, end).trim();
-        // 若最後一個選項尾巴黏著單獨答案字元（如 "...以上皆是 4" 或 "...以上皆是 D"）
-        if (i === matches.length - 1 && !rawAnswerToken) {
-          const tailAns = optText.match(/\s+([A-D1-4])$/i);
-          if (tailAns) {
-            rawAnswerToken = tailAns[1].toUpperCase();
-            optText = optText.slice(0, tailAns.index).trim();
+
+        // 處理最後一個選項末尾附帶的答案欄數字/字母（如 "...高架地板作業 2" 或 "...高架地板作業 2 Answer"）
+        if (i === matches.length - 1) {
+          const tailAnsWithHeader = optText.match(/\s+\(?([A-E1-5])\)?(?:\s+(?:Answer|Ans|答案))?\s*$/i);
+          if (tailAnsWithHeader) {
+            if (!rawAnswerToken) {
+              rawAnswerToken = tailAnsWithHeader[1].toUpperCase();
+            }
+            optText = optText.slice(0, tailAnsWithHeader.index).trim();
           }
         }
         if (optText) options.push(optText);
@@ -230,8 +288,10 @@ export function parseQuestionsFromText(rawText) {
           : 0;
 
       if (questionStem && options.length >= 2) {
+        if (block.qNum) seenNumbers.add(block.qNum);
         parsedQuestions.push({
           id: `q-${Date.now()}-${idx}`,
+          sourceNumber: block.qNum || idx + 1,
           type: 'choice',
           question: questionStem,
           options: options.slice(0, 5),
@@ -240,8 +300,7 @@ export function parseQuestionsFromText(rawText) {
         });
       }
     } else {
-      // 【情況 B：是非題 (O / X)】— 常見於廠務/工安表格題庫
-      // 偵測列中獨立出現的 O / X（例如 "...需鋪設 PVC 軟墊 O" 或 "...點數 O 違反台灣美光... O"）
+      // 是非題 (O / X)
       const tfMatch = bodyWithoutExp.match(/^(.*?)\s+([OX○〇✕✖×對錯是否])(?:\s+(.*))?$/i);
       let tfToken = rawAnswerToken;
       let stemText = bodyWithoutExp;
@@ -251,12 +310,12 @@ export function parseQuestionsFromText(rawText) {
         stemText = tfMatch[1].trim();
         tfToken = tfMatch[2].toUpperCase();
         if (tfMatch[3] && tfMatch[3].trim()) {
-          // 清除「題目修正」欄末尾重複的 O/X
           revisionNote = tfMatch[3].replace(/\s+[OX○〇✕✖×對錯是否]$/i, '').trim();
         }
       }
 
       if (tfToken && (TF_TRUE_SET.has(tfToken) || TF_FALSE_SET.has(tfToken)) && stemText.length >= 4) {
+        if (block.qNum) seenNumbers.add(block.qNum);
         const isTrue = TF_TRUE_SET.has(tfToken);
         const combinedExp = [
           explanation,
@@ -268,6 +327,7 @@ export function parseQuestionsFromText(rawText) {
 
         parsedQuestions.push({
           id: `q-${Date.now()}-${idx}`,
+          sourceNumber: block.qNum || idx + 1,
           type: 'boolean',
           question: stemText,
           options: ['O（正確）', 'X（錯誤）'],
@@ -278,7 +338,27 @@ export function parseQuestionsFromText(rawText) {
     }
   }
 
-  return parsedQuestions;
+  // 檢查題號連續性，找出是否漏掉哪一題（例如 1..100 中缺了第 54 題）
+  const sortedNums = Array.from(seenNumbers).sort((a, b) => a - b);
+  const maxDetectedNumber = sortedNums.length > 0 ? sortedNums[sortedNums.length - 1] : 0;
+  const missingNumbers = [];
+  if (maxDetectedNumber >= 5 && maxDetectedNumber <= 500) {
+    for (let n = 1; n <= maxDetectedNumber; n++) {
+      if (!seenNumbers.has(n)) {
+        missingNumbers.push(n);
+      }
+    }
+  }
+
+  return {
+    questions: parsedQuestions,
+    missingNumbers,
+    maxDetectedNumber,
+  };
+}
+
+export function parseQuestionsFromText(rawText) {
+  return parseQuestionsWithDiagnostics(rawText).questions;
 }
 
 export function parseQuestionsFromJson(jsonText) {
@@ -308,6 +388,7 @@ export function parseQuestionsFromJson(jsonText) {
 
       return {
         id: item.id || `q-json-${Date.now()}-${idx}`,
+        sourceNumber: idx + 1,
         type: opts.length === 2 ? 'boolean' : 'choice',
         question: String(qText).trim(),
         options: opts.map((o) => String(o).trim()),
@@ -327,10 +408,10 @@ export const SAMPLE_JSON_TEMPLATE = JSON.stringify(
       explanation: '進行空調箱內部濾網更換前，必須先確認風機停止運轉並執行 LOTO 能量隔離。',
     },
     {
-      question: '在有限空間從事點檢作業時，作業前氧氣濃度測定值應維持在何種範圍內始得進入？',
-      options: ['14% ～ 16%', '16% ～ 17.5%', '18% ～ 23.5%', '25% 以上'],
-      answer: 'C',
-      explanation: '作業場所空氣中氧氣濃度必須保持在 18% 以上、23.5% 以下。',
+      question: '選擇風險控制措施時應優先選擇下列何者？',
+      options: ['個人防護具', '工程控制', '管理控制', '消除'],
+      answer: 'D',
+      explanation: '風險控制層級依序為：消除 → 取代 → 工程控制 → 管理控制 → 個人防護具。',
     },
   ],
   null,
