@@ -491,7 +491,7 @@ export default function StudyWorkspace({ project, onSaveProject }) {
               </div>
 
               <div className="mb-6 flex items-start justify-between gap-3">
-                <h2 className="text-base font-semibold leading-relaxed text-charcoal dark:text-zinc-100 sm:text-lg">
+                <h2 className="min-w-0 [overflow-wrap:anywhere] text-base font-semibold leading-relaxed text-charcoal dark:text-zinc-100 sm:text-lg">
                   {currentQuestion.question}
                 </h2>
                 <button

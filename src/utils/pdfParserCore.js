@@ -442,40 +442,30 @@ export function parseQuestionsFromText(rawText) {
 
 export function parseQuestionsFromJson(jsonText) {
   const data = JSON.parse(jsonText);
-  const list = Array.isArray(data) ? data : data.questions;
-  if (!Array.isArray(list)) {
-    throw new Error('JSON 格式錯誤：根層級必須為陣列或包含 questions 陣列。');
-  }
-
-  return list
-    .map((item, idx) => {
-      const qText = item.question || item.title || item.stem;
-      const opts = item.options || item.choices;
-      let ansIdx = 0;
-      if (typeof item.answerIndex === 'number') {
-        ansIdx = item.answerIndex;
-      } else if (typeof item.answer === 'string') {
-        const upper = normalizeChars(item.answer).trim().toUpperCase();
-        if (TF_TRUE_SET.has(upper)) ansIdx = 0;
-        else if (TF_FALSE_SET.has(upper)) ansIdx = 1;
-        else ansIdx = upper in LETTER_TO_INDEX ? LETTER_TO_INDEX[upper] : 0;
-      } else if (typeof item.answer === 'number') {
-        ansIdx = item.answer;
+  const list = Array.isArray(data) ? data : data?.questions;
+  if (!Array.isArray(list) || !list.length) throw new Error('JSON 必須包含非空 questions 陣列或題目陣列。');
+  const ids = new Set();
+  return list.map((item, idx) => {
+    const fail = () => { throw new Error(`JSON 第 ${idx + 1} 題：題幹、選項、答案或 ID 無效；未匯入任何題目。`); };
+    if (!item || typeof item !== 'object') return fail();
+    const question = item.question ?? item.title ?? item.stem;
+    const options = item.options ?? item.choices;
+    if (typeof question !== 'string' || !question.trim() || !Array.isArray(options) || options.length < 2 || options.length > 9 || options.some(o => typeof o !== 'string' || !o.trim())) return fail();
+    let answerIndex = item.answerIndex;
+    if (answerIndex === undefined) {
+      if (typeof item.answer === 'number') answerIndex = item.answer;
+      else if (typeof item.answer === 'string') {
+        const answer = normalizeChars(item.answer).trim().toUpperCase();
+        const isBoolean = options.length === 2 && TF_TRUE_SET.has(normalizeChars(options[0]).split(/[（(]/)[0].trim().toUpperCase()) && TF_FALSE_SET.has(normalizeChars(options[1]).split(/[（(]/)[0].trim().toUpperCase());
+        answerIndex = isBoolean && TF_TRUE_SET.has(answer) ? 0 : isBoolean && TF_FALSE_SET.has(answer) ? 1 : LETTER_TO_INDEX[answer];
       }
-
-      if (!qText || !Array.isArray(opts) || opts.length < 2) return null;
-
-      return {
-        id: item.id || `q-json-${Date.now()}-${idx}`,
-        sourceNumber: idx + 1,
-        type: opts.length === 2 ? 'boolean' : 'choice',
-        question: String(qText).trim(),
-        options: opts.map((o) => String(o).trim()),
-        answerIndex: Math.min(Math.max(0, ansIdx), opts.length - 1),
-        explanation: item.explanation ? String(item.explanation).trim() : '未提供詳細解析。',
-      };
-    })
-    .filter(Boolean);
+    }
+    if (!Number.isInteger(answerIndex) || answerIndex < 0 || answerIndex >= options.length) return fail();
+    const id = item.id ?? `q-json-${Date.now()}-${idx}`;
+    if (typeof id !== 'string' || !id.trim() || ids.has(id)) return fail();
+    ids.add(id);
+    return { id, sourceNumber: idx + 1, type: 'choice', question: question.trim(), options: options.map(o => o.trim()), answerIndex, explanation: String(item.explanation || '未提供詳細解析。').trim() };
+  });
 }
 
 export const SAMPLE_JSON_TEMPLATE = JSON.stringify(

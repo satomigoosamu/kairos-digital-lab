@@ -10,7 +10,7 @@ export default function ExamConfigPopover({ project, onUpdateConfig, onClose }) 
   const minCorrect = Math.ceil((passingScore / 100) * safeCount);
 
   return (
-    <div className="absolute right-0 top-12 z-30 w-80 rounded-xl border border-zinc-200 bg-white p-4 shadow-xl dark:border-zinc-700 dark:bg-obsidian-surface">
+    <div className="fixed left-4 right-4 top-24 z-30 w-auto max-w-[calc(100vw-2rem)] sm:absolute sm:left-auto sm:right-0 sm:top-12 sm:w-80 rounded-xl border border-zinc-200 bg-white p-4 shadow-xl dark:border-zinc-700 dark:bg-obsidian-surface">
       <div className="mb-3 flex items-center justify-between border-b border-zinc-100 pb-2.5 dark:border-zinc-800">
         <div className="flex items-center gap-1.5 text-xs font-semibold text-charcoal dark:text-zinc-100">
           <SlidersHorizontal className="h-3.5 w-3.5 text-gold" />

@@ -36,6 +36,7 @@ export async function getAllProjects() {
       resolve(items);
     };
     req.onerror = () => reject(req.error);
+    tx.oncomplete ??= () => db.close();
   });
 }
 
@@ -46,8 +47,10 @@ export async function saveProject(project) {
     const store = tx.objectStore(STORE_PROJECTS);
     const updated = { ...project, updatedAt: Date.now() };
     const req = store.put(updated);
-    req.onsuccess = () => resolve(updated);
+    tx.oncomplete = () => { db.close(); resolve(updated); };
+    tx.onabort = () => { db.close(); reject(tx.error || new Error("儲存交易已取消")); };
     req.onerror = () => reject(req.error);
+    tx.oncomplete ??= () => db.close();
   });
 }
 
@@ -57,8 +60,10 @@ export async function deleteProjectById(id) {
     const tx = db.transaction(STORE_PROJECTS, 'readwrite');
     const store = tx.objectStore(STORE_PROJECTS);
     const req = store.delete(id);
-    req.onsuccess = () => resolve();
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onabort = () => { db.close(); reject(tx.error || new Error("刪除交易已取消")); };
     req.onerror = () => reject(req.error);
+    tx.oncomplete ??= () => db.close();
   });
 }
 
@@ -79,4 +84,16 @@ export function savePreferences(prefs) {
   } catch {
     // Ignore storage quota errors
   }
+}
+
+export async function restoreProjects(projects) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_PROJECTS, 'readwrite');
+    const store = tx.objectStore(STORE_PROJECTS);
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onabort = () => { db.close(); reject(tx.error || new Error('還原交易取消')); };
+    store.clear();
+    projects.forEach(project => store.put(project));
+  });
 }

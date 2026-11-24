@@ -2,7 +2,8 @@
 import * as pdfjsLib from 'pdfjs-dist';
 import { parseSpatialTablePages, parseQuestionsWithDiagnostics, extractHorizontalRules, extractHiddenTextOrigins } from './pdfParserCore.js';
 export { parseQuestionsWithDiagnostics, parseQuestionsFromText, parseQuestionsFromJson, SAMPLE_JSON_TEMPLATE } from './pdfParserCore.js';
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
 
 export async function parsePdfFileWithDiagnostics(file) {
   const arrayBuffer = await file.arrayBuffer();

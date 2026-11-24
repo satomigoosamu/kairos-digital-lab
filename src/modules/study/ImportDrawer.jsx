@@ -30,6 +30,7 @@ export default function ImportDrawer({ isOpen, onClose, onCreateProject }) {
   const [parsedQuestions, setParsedQuestions] = useState([]);
   const [missingNumbers, setMissingNumbers] = useState([]);
   const [isParsing, setIsParsing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
   const [questionCount, setQuestionCount] = useState(0);
@@ -52,6 +53,7 @@ export default function ImportDrawer({ isOpen, onClose, onCreateProject }) {
   };
 
   const handleClose = () => {
+    if (isSaving || isParsing) return;
     resetState();
     onClose();
   };
@@ -69,7 +71,7 @@ export default function ImportDrawer({ isOpen, onClose, onCreateProject }) {
     setErrorMsg(Array.isArray(resultObj) ? '' : (resultObj.warnings || []).join(' '));
     setParsedQuestions(questions);
     setMissingNumbers(missing);
-    setQuestionCount(questions.length);
+    setQuestionCount(Math.min(20, questions.length));
     if (!projectTitle.trim() && defaultTitle) {
       setProjectTitle(defaultTitle.replace(/\.(pdf|json|txt)$/i, ''));
     }
@@ -79,6 +81,8 @@ export default function ImportDrawer({ isOpen, onClose, onCreateProject }) {
     if (!file) return;
     setErrorMsg('');
     setIsParsing(true);
+    setParsedQuestions([]);
+    setMissingNumbers([]);
     try {
       const ext = file.name.split('.').pop().toLowerCase();
       if (ext === 'pdf') {
@@ -108,6 +112,8 @@ export default function ImportDrawer({ isOpen, onClose, onCreateProject }) {
 
   const handleParseManualText = () => {
     setErrorMsg('');
+    setParsedQuestions([]);
+    setMissingNumbers([]);
     try {
       if (sourceTab === 'json') {
         const qs = parseQuestionsFromJson(rawText);
@@ -131,12 +137,14 @@ export default function ImportDrawer({ isOpen, onClose, onCreateProject }) {
     URL.revokeObjectURL(url);
   };
 
-  const handleConfirmCreate = () => {
-    if (parsedQuestions.length === 0) return;
+  const handleConfirmCreate = async () => {
+    if (parsedQuestions.length === 0 || isSaving || isParsing) return;
     const safeCount = Math.min(Math.max(1, Number(questionCount) || parsedQuestions.length), parsedQuestions.length);
     const safePass = Math.min(Math.max(1, Number(passingScore) || 60), 100);
 
-    onCreateProject({
+    setIsSaving(true);
+    try {
+    await onCreateProject({
       id: `proj-${Date.now()}`,
       title: projectTitle.trim() || `未命名考卷 (${parsedQuestions.length}題)`,
       createdAt: Date.now(),
@@ -151,7 +159,10 @@ export default function ImportDrawer({ isOpen, onClose, onCreateProject }) {
       lastExamSummary: null,
       questions: parsedQuestions,
     });
-    handleClose();
+    resetState();
+    onClose();
+    } catch (err) { setErrorMsg(`儲存失敗，請備份或釋放空間後重試：${err.message}`); }
+    finally { setIsSaving(false); }
   };
 
   const effectiveCount = parsedQuestions.length > 0 ? Math.min(Math.max(1, questionCount || parsedQuestions.length), parsedQuestions.length) : 0;
@@ -461,7 +472,7 @@ export default function ImportDrawer({ isOpen, onClose, onCreateProject }) {
         <div className="border-t border-zinc-200 bg-white px-6 py-4 dark:border-zinc-800 dark:bg-obsidian-surface">
           <button
             type="button"
-            disabled={parsedQuestions.length === 0}
+            disabled={parsedQuestions.length === 0 || isSaving || isParsing}
             onClick={handleConfirmCreate}
             className="w-full rounded-lg bg-charcoal py-2.5 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-gold dark:text-charcoal dark:hover:bg-gold-hover"
           >

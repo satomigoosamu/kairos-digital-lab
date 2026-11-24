@@ -25,6 +25,7 @@ import StudyWorkspace from './modules/study/StudyWorkspace';
 import EngineeringWorkspace from './modules/engineering/EngineeringWorkspace';
 import AiToolsWorkspace from './modules/ai/AiToolsWorkspace';
 import ImportDrawer from './modules/study/ImportDrawer';
+import BackupControls from './components/shared/BackupControls';
 import FooterBar from './components/shared/FooterBar';
 
 const DOMAINS = [
@@ -40,6 +41,7 @@ export default function App() {
   const [darkMode, setDarkMode] = useState(true);
   const [isImportOpen, setIsImportOpen] = useState(false);
 
+  const [restoreVersion, setRestoreVersion] = useState(0);
   const [renamingId, setRenamingId] = useState(null);
   const [renameInput, setRenameInput] = useState('');
 
@@ -58,7 +60,7 @@ export default function App() {
       setProjects(list);
       const validSaved = list.find((p) => p.id === prefs.activeTabId);
       setActiveTabId(validSaved ? validSaved.id : list[0]?.id || null);
-    });
+    }).catch(() => alert("無法讀取本機資料，請確認瀏覽器儲存權限後重新整理。"));
   }, []);
 
   const toggleDarkMode = () => {
@@ -128,6 +130,7 @@ export default function App() {
   };
 
   const handleDeleteProject = async (id) => {
+    if (!confirm('刪除後無法復原，建議先匯出備份。確定刪除此專案？')) return;
     await deleteProjectById(id);
     const remaining = projects.filter((p) => p.id !== id);
     setProjects(remaining);
@@ -327,10 +330,11 @@ export default function App() {
         )}
       </header>
 
+      {activeDomain === 'study' && <BackupControls onRestore={(list) => { setRestoreVersion(v => v + 1); setProjects(list); handleSelectTab(list[0]?.id || null); }} />}
       <main className="flex-1">
         {activeDomain === 'study' && (
           activeProject ? (
-            <StudyWorkspace project={activeProject} onSaveProject={handleUpdateProject} />
+            <StudyWorkspace key={`${activeProject.id}-${restoreVersion}`} project={activeProject} onSaveProject={handleUpdateProject} />
           ) : (
             <div className="mx-auto max-w-2xl px-4 py-16 text-center sm:px-6">
               <div className="rounded-2xl border border-zinc-200 bg-white p-10 shadow-sm dark:border-zinc-800 dark:bg-obsidian-surface">

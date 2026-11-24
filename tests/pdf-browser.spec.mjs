@@ -1,5 +1,5 @@
 // Optional browser integration: npm install --no-save playwright, then start npm run dev.
-// All inputs are synthetic. PDF worker is served locally by this test only.
+// All inputs are synthetic. PDF worker is served locally by the application.
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import {chromium} from 'playwright';
@@ -9,8 +9,6 @@ const browser=await chromium.launch({headless:true,
 try {
   const page=await browser.newPage();page.setDefaultTimeout(10000);
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
-  await page.route('https://unpkg.com/**/pdf.worker.min.mjs',route=>route.fulfill({
-    contentType:'application/javascript',body:fs.readFileSync(new URL('../node_modules/pdfjs-dist/build/pdf.worker.min.mjs',import.meta.url))}));
   await page.goto(process.env.BASE_URL || 'http://localhost:5173');
   const result=await page.evaluate(async bytes=>{
     const {parsePdfFileWithDiagnostics}=await import('/src/utils/pdfParser.js');
@@ -20,7 +18,7 @@ try {
   assert.equal(result.questions[0].question,'Shape?');assert.equal(result.questions[0].answerIndex,1);
   assert.equal(result.questions[2].options.length,6);assert.equal(result.questions[2].answerIndex,5);
   await page.getByRole('button',{name:'匯入 PDF / 題庫建立專案'}).click();
-  await page.locator('input[type=file]').setInputFiles({name:'synthetic.pdf',mimeType:'application/pdf',buffer:Buffer.from(syntheticPdf())});
+  await page.locator('input[accept=".pdf,.json,.txt"]').setInputFiles({name:'synthetic.pdf',mimeType:'application/pdf',buffer:Buffer.from(syntheticPdf())});
   await page.getByText('已排除標示刪除／作廢的題號：3。請由題庫負責人確認。',{exact:true}).waitFor();
   assert.match(await page.locator('body').innerText(),/成功切分\s*3\s*道獨立題目/);
   await page.getByRole('button',{name:'依原題庫順序',exact:true}).click();
