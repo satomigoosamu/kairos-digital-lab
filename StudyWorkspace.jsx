@@ -15,6 +15,7 @@ import {
   RefreshCw,
   Search,
 } from 'lucide-react';
+import { shortcutIndex } from '../../utils/studyShortcuts';
 import QuestionEditor from './QuestionEditor';
 import ExamHistory from './ExamHistory';
 import { readSession, writeSession, questionSignature, examRecord, appendHistory } from '../../utils/studyProgress';
@@ -47,7 +48,7 @@ export default function StudyWorkspace({ project, onSaveProject }) {
   const [ready, setReady] = useState(false);
   const submitting = useRef(false);
   const sessionMeta = useRef({ id: crypto.randomUUID(), startedAt: Date.now() });
-  const signature = questionSignature(project);
+  const signature = useMemo(() => questionSignature(project), [project.config, project.questions, project.questionRevision]);
   const [mode, setMode] = useState('mock');
   const [showConfigPopover, setShowConfigPopover] = useState(false);
 
@@ -83,6 +84,12 @@ export default function StudyWorkspace({ project, onSaveProject }) {
     },
     [project]
   );
+
+  const confirmRestart = () => !submitting.current && (isSubmitted || Object.keys(answers).length === 0 || confirm('此操作會清除目前答案並開始新測驗，確定繼續？'));
+  const restartSession = (nextMode = mode) => {
+    if (!confirmRestart()) return;
+    setMode(nextMode);startNewSession(project);
+  };
 
   useEffect(() => {
     setReady(false);
@@ -180,16 +187,15 @@ export default function StudyWorkspace({ project, onSaveProject }) {
 
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (submitting.current || showEditor || ['INPUT','TEXTAREA','SELECT','BUTTON'].includes(e.target.tagName)) return;
+      if (submitting.current || showEditor || showConfigPopover || e.target.isContentEditable || e.ctrlKey || e.metaKey || e.altKey || ['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) return;
       if (mode === 'wrong') return;
       if (mode === 'mock' && isSubmitted) return;
       if (!currentQuestion) return;
 
-      const key = e.key.toUpperCase();
-      const keyMap = { '1': 0, A: 0, O: 0, '2': 1, B: 1, X: 1, '3': 2, C: 2, '4': 3, D: 3 };
-      if (key in keyMap && keyMap[key] < currentQuestion.options.length) {
+      const optionIndex = shortcutIndex(e.key, currentQuestion.options);
+      if (optionIndex !== null) {
         e.preventDefault();
-        handleSelectOption(keyMap[key]);
+        handleSelectOption(optionIndex);
       } else if (e.key === 'ArrowRight') {
         e.preventDefault();
         setCurrentIndex((prev) => Math.min(sessionQuestions.length - 1, prev + 1));
@@ -204,6 +210,8 @@ export default function StudyWorkspace({ project, onSaveProject }) {
 
   const handleSubmitMockExam = async () => {
     if (submitting.current || isSubmitted || !sessionQuestions.length) return;
+    const remaining = sessionQuestions.filter(q => answers[q.id] === undefined).length;
+    if (remaining && !confirm(`還有 ${remaining} 題未作答，未答題將計為錯誤。確定交卷？`)) return;
     submitting.current = true;
     try {
       if ((project.examHistory || []).some(r => r.id === sessionMeta.current.id)) {
@@ -277,8 +285,7 @@ export default function StudyWorkspace({ project, onSaveProject }) {
           <button
             type="button"
             onClick={() => {
-              setMode('mock');
-              startNewSession(project);
+              restartSession('mock');
             }}
             className={`flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-medium transition ${
               mode === 'mock'
@@ -293,8 +300,7 @@ export default function StudyWorkspace({ project, onSaveProject }) {
           <button
             type="button"
             onClick={() => {
-              setMode('practice');
-              startNewSession(project);
+              restartSession('practice');
             }}
             className={`flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-medium transition ${
               mode === 'practice'
@@ -342,10 +348,12 @@ export default function StudyWorkspace({ project, onSaveProject }) {
           {showConfigPopover && (
             <ExamConfigPopover
               project={project}
-              onUpdateConfig={(newConfig) => {
-                const updated = { ...project, config: newConfig };
-                onSaveProject(updated);
-                startNewSession(updated);
+              onUpdateConfig={async (newConfig) => {
+                if (newConfig.questionCount === project.config.questionCount && newConfig.passingScore === project.config.passingScore && newConfig.shuffle === project.config.shuffle) return true;
+                if (!confirmRestart()) return false;
+                submitting.current = true;
+                try { await onSaveProject({ ...project, config:newConfig }); return true; }
+                finally { submitting.current = false; }
               }}
               onClose={() => setShowConfigPopover(false)}
             />
@@ -393,7 +401,7 @@ export default function StudyWorkspace({ project, onSaveProject }) {
 
                 <button
                   type="button"
-                  onClick={() => startNewSession(project)}
+                  onClick={() => restartSession()}
                   className="inline-flex items-center gap-1.5 rounded-lg bg-charcoal px-4 py-2 text-xs font-medium text-white transition hover:bg-zinc-800 dark:bg-gold dark:text-charcoal dark:hover:bg-gold-hover"
                 >
                   <RefreshCw className="h-3.5 w-3.5" />
@@ -650,7 +658,7 @@ export default function StudyWorkspace({ project, onSaveProject }) {
                 ) : (
                   <button
                     type="button"
-                    onClick={() => startNewSession(project)}
+                    onClick={() => restartSession()}
                     className="inline-flex items-center gap-1.5 rounded-lg bg-gold px-4 py-2 text-xs font-bold text-charcoal transition hover:bg-gold-hover"
                   >
                     <RefreshCw className="h-3.5 w-3.5" />

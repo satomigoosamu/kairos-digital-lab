@@ -1,14 +1,14 @@
 {
   "name": "kairos-study-lab",
   "private": true,
-  "version": "1.7.1",
+  "version": "1.7.2",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
     "test": "node --test tests/*.test.mjs",
-    "test:browser": "node tests/pdf-browser.spec.mjs && node tests/phase0-browser.mjs && node tests/v171-browser.mjs"
+    "test:browser": "node tests/pdf-browser.spec.mjs && node tests/phase0-browser.mjs && node tests/v171-browser.mjs && node tests/v172-browser.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.460.0",

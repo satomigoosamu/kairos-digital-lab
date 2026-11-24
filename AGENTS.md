@@ -32,4 +32,4 @@
 `npm ci`、`npm test`、`npm run build`。瀏覽器測試先啟動 `npm run dev -- --host 127.0.0.1`，再執行 `npm run test:browser`。
 
 ## 版本與交付
-每批修改交付必須遞增版本（目前 v1.7.1），同步 package.json、lockfile；頁尾由 package.json 讀取版本。只交付相對上一個已套用版本的增量檔案，由使用者自行發布。不得代為部署。
+每批修改交付必須遞增版本（目前 v1.7.2），同步 package.json、lockfile；頁尾由 package.json 讀取版本。只交付相對上一個已套用版本的增量檔案，由使用者自行發布。不得代為部署。

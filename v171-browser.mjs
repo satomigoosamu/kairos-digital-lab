@@ -6,7 +6,7 @@ try {
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   page.on('dialog',d=>d.accept());
   await page.goto(process.env.BASE_URL||'http://127.0.0.1:5173');
-  await page.getByText('v1.7.1 Workspace',{exact:true}).waitFor();
+  await page.getByText('v1.7.2 Workspace',{exact:true}).waitFor();
   const project={id:'v171',title:'Synthetic v171',createdAt:1,config:{questionCount:2,passingScore:80,shuffle:false},questions:[{id:'q1',question:'First invented question?',options:['Alpha','Beta'],answerIndex:0},{id:'q2',question:'Second invented question?',options:['Gamma','Delta'],answerIndex:1}],wrongQuestionIds:[],wrongCounts:{}};
   await page.evaluate(async p=>{await (await import('/src/utils/storage.js')).saveProject(p);},project);
   await page.reload();
@@ -55,5 +55,5 @@ try {
   assert.equal(backup[0].examHistory[0].score,100);assert.equal(backup[0].questions[0].answerIndex,1);
   await page.screenshot({path:'../../outputs/v1.7.1-mobile.png',fullPage:true});
   assert.deepEqual(errors,[]);
-  console.log('PASS v1.7.1 footer, resume answers/location, reload submitted history, editor validation/correction, history backup and 390px');
+  console.log('PASS v1.7.2 footer, resume answers/location, reload submitted history, editor validation/correction, history backup and 390px');
 } finally {await browser.close();}
